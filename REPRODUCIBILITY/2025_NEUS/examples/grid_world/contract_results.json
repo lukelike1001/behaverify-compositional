@@ -1,12 +1,12 @@
 {
   "onnx_path": "./networks/1000__6_18_0__0200_1.onnx",
-  "timestamp": "2026-03-03T13:46:14.512022",
+  "timestamp": "2026-03-03T21:58:59.565275",
   "mode": "integer-only (EPS=0.001)",
   "timeout_sec": 300,
   "summary": {
-    "sat": 38,
-    "unsat": 0,
-    "timeout": 0,
+    "SAT": 38,
+    "UNSAT": 0,
+    "TIMEOUT": 0,
     "total": 38
   },
   "contracts": [
