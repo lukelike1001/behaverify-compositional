@@ -16,11 +16,11 @@ verification:
   # CROWN performs essentially a point-check at each integer coordinate.
   eps: 0.001
   # BaB timeout in seconds per sub-verification.
-  timeout_sec: 300
+  timeout_sec: 60
 
 # File paths (relative to the directory where the script is run).
 onnx_path: ./networks/1000__6_18_0__0200_1.onnx
-output_path: ./contract_results.json
+output_path: ./contracts/1000__6_18_0__0200_1.json
 
 # Obstacle positions [x, y] from template.tree.
 # Stored as a flat array in the DSL (index 2k = x, index 2k+1 = y).

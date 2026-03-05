@@ -2,21 +2,27 @@
 Verify A/G safety contracts for the grid-world NSBT using alpha-beta-CROWN.
 
 Contract schema (per obstacle o=(ox,oy), per entry direction d):
-  Assume : drone at adjacent cell (cx,cy), goal at ANY integer point in [0,6]^2
+  Assume : drone at adjacent cell (cx,cy) ± EPS  (tiny neighborhood of the integer)
   Guarantee: NN output != direction d  (d would move drone into obstacle)
+             for ALL goal positions (x_g, y_g) in [GRID_MIN, GRID_MAX]^2
 
-Verification mode: INTEGER-ONLY
-  For each contract, 49 sub-verifications are run — one per integer goal
-  (x_g, y_g) in {0,...,6}^2. Each uses a tiny EPS-ball (0.001) around the
-  integer point so CROWN sees a proper interval while staying essentially at
-  the integer input. The NN was trained and verified on integer inputs only,
-  so this is the correct granularity.
+Verification mode: SINGLE-CALL (one CROWN call per contract)
+  The drone position is fixed to an EPS-ball around the integer source cell.
+  The goal ranges continuously over the full grid [GRID_MIN, GRID_MAX]^2 in a
+  single CROWN call — 38 calls total instead of 38 × 49 = 1,862.
+
+  This is sound: if the property holds for all real-valued goals in [0, 6]^2,
+  it certainly holds for the 49 integer goals that arise during BT execution.
+
+  Note on EPS: CROWN requires a proper interval (no point queries). EPS=0.001
+  is a tiny neighborhood around the integer source cell; the NN's large logit
+  margins at training points mean no decision boundary is crossed within it.
 
 Class index mapping (from draw_network.py CODES, matches DSL declaration order):
   We=0  Ea=1  No=2  So=3  XX=4
 
 Configuration: verify_contracts.yaml
-Output: contract_results.json (path set in YAML)
+Output: JSON file (path set in YAML)
 """
 
 import sys
@@ -45,11 +51,6 @@ EPS         = _cfg["verification"]["eps"]
 TIMEOUT_SEC = _cfg["verification"]["timeout_sec"]
 OBSTACLES   = [tuple(obs) for obs in _cfg["obstacles"]]
 OBSTACLE_SET = set(OBSTACLES)
-GOAL_POINTS = [
-    (x_g, y_g)
-    for x_g in range(GRID_MIN, GRID_MAX + 1)
-    for y_g in range(GRID_MIN, GRID_MAX + 1)
-]
 
 # Direction index → (label, dx, dy). Not externalized: fixed cardinal directions.
 #   dx/dy is the movement applied when this direction is chosen.
@@ -97,14 +98,21 @@ def generate_contracts() -> list[tuple[int, int, int, str, int, int, str]]:
     return contracts
 
 # ---------------------------------------------------------------------------
-# Sub-verification: single integer goal point
+# Single-call contract verification
 # ---------------------------------------------------------------------------
 
-def verify_at_goal(onnx_path: str, cx: int, cy: int, forbidden_d: int, x_g: int, y_g: int, config: Any) -> Any:
-    """Verify the contract at a single integer goal (x_g, y_g) using an EPS-ball."""
+def verify_contract(onnx_path: str, cx: int, cy: int, forbidden_d: int, config: Any) -> str:
+    """
+    Verify one contract with a single CROWN call.
+
+    Drone position: [cx-EPS, cx+EPS] x [cy-EPS, cy+EPS]  (≈ integer point)
+    Goal position:  [GRID_MIN, GRID_MAX]^2                 (full continuous range)
+
+    Returns "SAT", "UNSAT", or "TIMEOUT".
+    """
     x = input_vars((4,))
-    lower = torch.tensor([cx - EPS, cy - EPS, x_g - EPS, y_g - EPS], dtype=torch.float32)
-    upper = torch.tensor([cx + EPS, cy + EPS, x_g + EPS, y_g + EPS], dtype=torch.float32)
+    lower = torch.tensor([cx - EPS, cy - EPS, GRID_MIN, GRID_MIN], dtype=torch.float32)
+    upper = torch.tensor([cx + EPS, cy + EPS, GRID_MAX, GRID_MAX], dtype=torch.float32)
     input_constraint = (x >= lower) & (x <= upper)
     y = output_vars(NUM_CLASSES)
     other = [j for j in range(NUM_CLASSES) if j != forbidden_d]
@@ -115,30 +123,8 @@ def verify_at_goal(onnx_path: str, cx: int, cy: int, forbidden_d: int, x_g: int,
         input_vars=x, output_vars=y,
         input_constraint=input_constraint, output_constraint=output_constraint,
     )
-    return ABCrownSolver(spec, onnx_path, config=config).solve()
-
-# ---------------------------------------------------------------------------
-# Contract verification: all integer goal points
-# ---------------------------------------------------------------------------
-
-def verify_contract(onnx_path: str, cx: int, cy: int, forbidden_d: int, config: Any) -> tuple[str, dict[str, str], tuple[int, int] | None]:
-    """
-    Verify the contract over all integer goal positions.
-
-    Returns:
-        overall  : "SAT" | "UNSAT" | "TIMEOUT"
-        sub      : dict mapping "(x_g,y_g)" -> status string
-        ce_goal  : (x_g, y_g) of first counterexample, or None
-    """
-    sub, had_timeout = {}, False
-    for (x_g, y_g) in GOAL_POINTS:
-        status = normalize_status(verify_at_goal(onnx_path, cx, cy, forbidden_d, x_g, y_g, config).status)
-        sub[f"({x_g},{y_g})"] = status
-        if status == "UNSAT":
-            return "UNSAT", sub, (x_g, y_g)
-        if status == "TIMEOUT":
-            had_timeout = True
-    return ("TIMEOUT" if had_timeout else "SAT"), sub, None
+    result = ABCrownSolver(spec, onnx_path, config=config).solve()
+    return normalize_status(result.status)
 
 # ---------------------------------------------------------------------------
 # Helpers for run_verification
@@ -154,15 +140,15 @@ def build_crown_config(cfg: dict[str, Any]) -> Any:
         ()
     )
 
-def result_marker(overall: str, ce_goal: tuple[int, int] | None) -> str:
+def result_marker(overall: str) -> str:
     """Return the console marker string for a contract result."""
     if overall == "SAT":
         return "✓"
     if overall == "UNSAT":
-        return f"✗  ← VIOLATION (counterexample goal={ce_goal})"
+        return "✗  ← VIOLATION"
     return "?  ← TIMEOUT (inconclusive)"
 
-def contract_record(i: int, contract: tuple[int, int, int, str, int, int, str], overall: str, sub: dict[str, str], ce_goal: tuple[int, int] | None) -> dict[str, Any]:
+def contract_record(i: int, contract: tuple[int, int, int, str, int, int, str], overall: str) -> dict[str, Any]:
     """Build the JSON record for one contract."""
     cx, cy, d_idx, label, ox, oy, desc = contract
     return {
@@ -173,8 +159,6 @@ def contract_record(i: int, contract: tuple[int, int, int, str, int, int, str], 
         "forbidden_dir_idx": d_idx,
         "description": desc,
         "status": overall,
-        "counterexample_goal": list(ce_goal) if ce_goal else None,
-        "sub_results": sub,
     }
 
 def print_summary(records: list[dict[str, Any]]) -> None:
@@ -189,7 +173,7 @@ def save_report(records: list[dict[str, Any]], cfg: dict[str, Any]) -> None:
     report = {
         "onnx_path": cfg["onnx_path"],
         "timestamp": datetime.datetime.now().isoformat(),
-        "mode": f"integer-only (EPS={cfg['verification']['eps']})",
+        "mode": f"single-call, goal=[{GRID_MIN},{GRID_MAX}]^2, drone EPS={cfg['verification']['eps']}",
         "timeout_sec": cfg["verification"]["timeout_sec"],
         "summary": {**counts, "total": len(records)},
         "contracts": records,
@@ -207,16 +191,17 @@ def run_verification(cfg: dict[str, Any]) -> None:
     eps, timeout = cfg["verification"]["eps"], cfg["verification"]["timeout_sec"]
     crown_config = build_crown_config(cfg)
     contracts = generate_contracts()
-    print(f"Generated {len(contracts)} contracts (EPS={eps}, timeout={timeout}s)\n")
+    print(f"Generated {len(contracts)} contracts  "
+          f"(drone EPS={eps}, goal=[{GRID_MIN},{GRID_MAX}]^2, timeout={timeout}s)\n")
     print(f"{'#':<4} {'Description':<45} {'Status':<10} {'Marker'}")
     print("-" * 75)
     records = []
     for i, contract in enumerate(contracts):
         cx, cy, d_idx, *_ = contract
-        overall, sub, ce_goal = verify_contract(cfg["onnx_path"], cx, cy, d_idx, crown_config)
-        print(f"{i+1:<4} {contract[-1]:<45} {overall:<10} {result_marker(overall, ce_goal)}")
+        overall = verify_contract(cfg["onnx_path"], cx, cy, d_idx, crown_config)
+        print(f"{i+1:<4} {contract[-1]:<45} {overall:<10} {result_marker(overall)}")
         sys.stdout.flush()
-        records.append(contract_record(i + 1, contract, overall, sub, ce_goal))
+        records.append(contract_record(i + 1, contract, overall))
     print("-" * 75)
     print_summary(records)
     save_report(records, cfg)
