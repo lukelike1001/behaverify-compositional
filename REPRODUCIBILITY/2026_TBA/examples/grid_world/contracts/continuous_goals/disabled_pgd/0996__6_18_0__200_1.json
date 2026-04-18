@@ -1,6 +1,6 @@
 {
   "onnx_path": "./networks/0996__6_18_0__200_1.onnx",
-  "timestamp": "2026-04-07T08:56:59.845306",
+  "timestamp": "2026-04-17T21:17:34.584022",
   "mode": "single-call, goal=[0,6]^2, drone EPS=0.001",
   "timeout_sec": 60,
   "summary": {

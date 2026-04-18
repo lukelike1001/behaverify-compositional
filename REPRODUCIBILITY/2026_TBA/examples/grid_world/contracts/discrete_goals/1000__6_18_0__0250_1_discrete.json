@@ -1,6 +1,6 @@
 {
   "onnx_path": "./networks/1000__6_18_0__0250_1.onnx",
-  "timestamp": "2026-04-07T17:42:14.868220",
+  "timestamp": "2026-04-17T16:42:55.064759",
   "mode": "discrete, 49 integer goals, drone EPS=0.0, goal EPS=0.0, timeout=5.0s per goal",
   "timeout_sec": 60,
   "summary": {

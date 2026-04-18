@@ -1,6 +1,6 @@
 {
   "onnx_path": "./networks/1000__6_18_0__0200_1.onnx",
-  "timestamp": "2026-04-01T10:41:09.966265",
+  "timestamp": "2026-04-17T14:36:52.562808",
   "mode": "single-call, goal=[0,6]^2, drone EPS=0.001",
   "timeout_sec": 60,
   "summary": {
@@ -23,7 +23,8 @@
       "forbidden_dir": "So",
       "forbidden_dir_idx": 3,
       "description": "obstacle (0,1)  source (0,2)  forbid So",
-      "status": "SAT"
+      "status": "SAT",
+      "counterexample": null
     },
     {
       "id": 2,
@@ -38,7 +39,8 @@
       "forbidden_dir": "We",
       "forbidden_dir_idx": 0,
       "description": "obstacle (1,0)  source (2,0)  forbid We",
-      "status": "SAT"
+      "status": "SAT",
+      "counterexample": null
     },
     {
       "id": 3,
@@ -53,7 +55,8 @@
       "forbidden_dir": "We",
       "forbidden_dir_idx": 0,
       "description": "obstacle (1,2)  source (2,2)  forbid We",
-      "status": "SAT"
+      "status": "SAT",
+      "counterexample": null
     },
     {
       "id": 4,
@@ -68,7 +71,13 @@
       "forbidden_dir": "Ea",
       "forbidden_dir_idx": 1,
       "description": "obstacle (1,2)  source (0,2)  forbid Ea",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        0.001,
+        2.001,
+        3.080815,
+        0.555314
+      ]
     },
     {
       "id": 5,
@@ -83,7 +92,8 @@
       "forbidden_dir": "So",
       "forbidden_dir_idx": 3,
       "description": "obstacle (1,2)  source (1,3)  forbid So",
-      "status": "SAT"
+      "status": "SAT",
+      "counterexample": null
     },
     {
       "id": 6,
@@ -98,7 +108,13 @@
       "forbidden_dir": "Ea",
       "forbidden_dir_idx": 1,
       "description": "obstacle (1,4)  source (0,4)  forbid Ea",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        -0.000753,
+        4.000248,
+        2.694013,
+        3.167332
+      ]
     },
     {
       "id": 7,
@@ -113,7 +129,8 @@
       "forbidden_dir": "No",
       "forbidden_dir_idx": 2,
       "description": "obstacle (1,4)  source (1,3)  forbid No",
-      "status": "SAT"
+      "status": "SAT",
+      "counterexample": null
     },
     {
       "id": 8,
@@ -128,7 +145,8 @@
       "forbidden_dir": "So",
       "forbidden_dir_idx": 3,
       "description": "obstacle (1,4)  source (1,5)  forbid So",
-      "status": "SAT"
+      "status": "SAT",
+      "counterexample": null
     },
     {
       "id": 9,
@@ -143,7 +161,8 @@
       "forbidden_dir": "Ea",
       "forbidden_dir_idx": 1,
       "description": "obstacle (1,6)  source (0,6)  forbid Ea",
-      "status": "SAT"
+      "status": "SAT",
+      "counterexample": null
     },
     {
       "id": 10,
@@ -158,7 +177,8 @@
       "forbidden_dir": "No",
       "forbidden_dir_idx": 2,
       "description": "obstacle (1,6)  source (1,5)  forbid No",
-      "status": "SAT"
+      "status": "SAT",
+      "counterexample": null
     },
     {
       "id": 11,
@@ -173,7 +193,13 @@
       "forbidden_dir": "We",
       "forbidden_dir_idx": 0,
       "description": "obstacle (2,1)  source (3,1)  forbid We",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        3.001,
+        1.001,
+        0.0,
+        2.538247
+      ]
     },
     {
       "id": 12,
@@ -188,7 +214,13 @@
       "forbidden_dir": "No",
       "forbidden_dir_idx": 2,
       "description": "obstacle (2,1)  source (2,0)  forbid No",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        1.99999,
+        0.000249,
+        0.3757,
+        3.801602
+      ]
     },
     {
       "id": 13,
@@ -203,7 +235,8 @@
       "forbidden_dir": "So",
       "forbidden_dir_idx": 3,
       "description": "obstacle (2,1)  source (2,2)  forbid So",
-      "status": "SAT"
+      "status": "SAT",
+      "counterexample": null
     },
     {
       "id": 14,
@@ -218,7 +251,13 @@
       "forbidden_dir": "We",
       "forbidden_dir_idx": 0,
       "description": "obstacle (2,4)  source (3,4)  forbid We",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        3.000033,
+        3.999778,
+        1.00264,
+        4.431782
+      ]
     },
     {
       "id": 15,
@@ -233,7 +272,13 @@
       "forbidden_dir": "No",
       "forbidden_dir_idx": 2,
       "description": "obstacle (2,4)  source (2,3)  forbid No",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        2.001,
+        2.999,
+        0.057827,
+        1.779853
+      ]
     },
     {
       "id": 16,
@@ -248,7 +293,13 @@
       "forbidden_dir": "So",
       "forbidden_dir_idx": 3,
       "description": "obstacle (2,4)  source (2,5)  forbid So",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        2.001,
+        4.999,
+        2.442613,
+        3.506213
+      ]
     },
     {
       "id": 17,
@@ -263,7 +314,8 @@
       "forbidden_dir": "No",
       "forbidden_dir_idx": 2,
       "description": "obstacle (2,6)  source (2,5)  forbid No",
-      "status": "SAT"
+      "status": "SAT",
+      "counterexample": null
     },
     {
       "id": 18,
@@ -278,7 +330,13 @@
       "forbidden_dir": "We",
       "forbidden_dir_idx": 0,
       "description": "obstacle (3,3)  source (4,3)  forbid We",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        3.999247,
+        3.000248,
+        2.694013,
+        3.167332
+      ]
     },
     {
       "id": 19,
@@ -293,7 +351,13 @@
       "forbidden_dir": "Ea",
       "forbidden_dir_idx": 1,
       "description": "obstacle (3,3)  source (2,3)  forbid Ea",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        1.999,
+        2.999,
+        3.287766,
+        2.599921
+      ]
     },
     {
       "id": 20,
@@ -308,7 +372,13 @@
       "forbidden_dir": "No",
       "forbidden_dir_idx": 2,
       "description": "obstacle (3,3)  source (3,2)  forbid No",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        3.000229,
+        2.000712,
+        1.382743,
+        2.2329
+      ]
     },
     {
       "id": 21,
@@ -323,7 +393,13 @@
       "forbidden_dir": "So",
       "forbidden_dir_idx": 3,
       "description": "obstacle (3,3)  source (3,4)  forbid So",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        3.000177,
+        3.999032,
+        5.506464,
+        3.15614
+      ]
     },
     {
       "id": 22,
@@ -338,7 +414,13 @@
       "forbidden_dir": "We",
       "forbidden_dir_idx": 0,
       "description": "obstacle (3,6)  source (4,6)  forbid We",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        3.999,
+        5.999,
+        0.861153,
+        6.0
+      ]
     },
     {
       "id": 23,
@@ -353,7 +435,8 @@
       "forbidden_dir": "No",
       "forbidden_dir_idx": 2,
       "description": "obstacle (3,6)  source (3,5)  forbid No",
-      "status": "SAT"
+      "status": "SAT",
+      "counterexample": null
     },
     {
       "id": 24,
@@ -368,7 +451,8 @@
       "forbidden_dir": "We",
       "forbidden_dir_idx": 0,
       "description": "obstacle (4,1)  source (5,1)  forbid We",
-      "status": "SAT"
+      "status": "SAT",
+      "counterexample": null
     },
     {
       "id": 25,
@@ -383,7 +467,8 @@
       "forbidden_dir": "Ea",
       "forbidden_dir_idx": 1,
       "description": "obstacle (4,1)  source (3,1)  forbid Ea",
-      "status": "SAT"
+      "status": "SAT",
+      "counterexample": null
     },
     {
       "id": 26,
@@ -398,7 +483,13 @@
       "forbidden_dir": "No",
       "forbidden_dir_idx": 2,
       "description": "obstacle (4,1)  source (4,0)  forbid No",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        4.000616,
+        0.000849,
+        3.701965,
+        0.480736
+      ]
     },
     {
       "id": 27,
@@ -413,7 +504,8 @@
       "forbidden_dir": "We",
       "forbidden_dir_idx": 0,
       "description": "obstacle (4,2)  source (5,2)  forbid We",
-      "status": "SAT"
+      "status": "SAT",
+      "counterexample": null
     },
     {
       "id": 28,
@@ -428,7 +520,13 @@
       "forbidden_dir": "Ea",
       "forbidden_dir_idx": 1,
       "description": "obstacle (4,2)  source (3,2)  forbid Ea",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        2.999,
+        2.001,
+        6.0,
+        0.646804
+      ]
     },
     {
       "id": 29,
@@ -443,7 +541,13 @@
       "forbidden_dir": "So",
       "forbidden_dir_idx": 3,
       "description": "obstacle (4,2)  source (4,3)  forbid So",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        4.001,
+        2.999,
+        1.876619,
+        0.0
+      ]
     },
     {
       "id": 30,
@@ -458,7 +562,13 @@
       "forbidden_dir": "We",
       "forbidden_dir_idx": 0,
       "description": "obstacle (5,5)  source (6,5)  forbid We",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        5.999359,
+        5.000649,
+        4.399442,
+        5.21961
+      ]
     },
     {
       "id": 31,
@@ -473,7 +583,13 @@
       "forbidden_dir": "Ea",
       "forbidden_dir_idx": 1,
       "description": "obstacle (5,5)  source (4,5)  forbid Ea",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        4.000678,
+        4.999802,
+        5.895452,
+        5.482754
+      ]
     },
     {
       "id": 32,
@@ -488,7 +604,13 @@
       "forbidden_dir": "No",
       "forbidden_dir_idx": 2,
       "description": "obstacle (5,5)  source (5,4)  forbid No",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        4.999359,
+        4.000649,
+        4.399442,
+        5.21961
+      ]
     },
     {
       "id": 33,
@@ -503,7 +625,13 @@
       "forbidden_dir": "So",
       "forbidden_dir_idx": 3,
       "description": "obstacle (5,5)  source (5,6)  forbid So",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        5.000177,
+        5.999032,
+        5.506464,
+        3.15614
+      ]
     },
     {
       "id": 34,
@@ -518,7 +646,13 @@
       "forbidden_dir": "Ea",
       "forbidden_dir_idx": 1,
       "description": "obstacle (6,1)  source (5,1)  forbid Ea",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        4.999,
+        0.999,
+        6.0,
+        0.0
+      ]
     },
     {
       "id": 35,
@@ -533,7 +667,13 @@
       "forbidden_dir": "No",
       "forbidden_dir_idx": 2,
       "description": "obstacle (6,1)  source (6,0)  forbid No",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        5.999,
+        0.001,
+        0.602413,
+        6.0
+      ]
     },
     {
       "id": 36,
@@ -548,7 +688,8 @@
       "forbidden_dir": "Ea",
       "forbidden_dir_idx": 1,
       "description": "obstacle (6,2)  source (5,2)  forbid Ea",
-      "status": "SAT"
+      "status": "SAT",
+      "counterexample": null
     },
     {
       "id": 37,
@@ -563,7 +704,8 @@
       "forbidden_dir": "Ea",
       "forbidden_dir_idx": 1,
       "description": "obstacle (6,3)  source (5,3)  forbid Ea",
-      "status": "SAT"
+      "status": "SAT",
+      "counterexample": null
     },
     {
       "id": 38,
@@ -578,7 +720,13 @@
       "forbidden_dir": "So",
       "forbidden_dir_idx": 3,
       "description": "obstacle (6,3)  source (6,4)  forbid So",
-      "status": "UNSAT"
+      "status": "UNSAT",
+      "counterexample": [
+        6.001,
+        3.999,
+        0.710963,
+        4.152273
+      ]
     }
   ]
 }

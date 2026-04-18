@@ -392,8 +392,11 @@ def run_verification(cfg: dict[str, Any]) -> dict[str, Any]:
 
 def _self_rss_kb() -> int:
     """Peak RSS of this process so far (KB)."""
-    import resource  # noqa: PLC0415
-    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    try:
+        import resource  # noqa: PLC0415
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    except ImportError:
+        return 0  # Windows: resource module not available
 
 
 # ---------------------------------------------------------------------------
