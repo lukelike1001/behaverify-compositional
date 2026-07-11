@@ -10,6 +10,7 @@
 *.nope
 *.goutputstream-*
 **/__pycache__/**
+.vscode/
 __pycache__/
 IGNORE/
 temp_output/**
@@ -41,5 +42,6 @@ REPRODUCIBILITY/**/python/**
 REPRODUCIBILITY/**/haskell/**
 REPRODUCIBILITY/**/dense_fixed/**
 REPRODUCIBILITY/**/sparse_random/**
+REPRODUCIBILITY/**/nuXmv_DL/**
 src/behaverify.egg-info/
 build/

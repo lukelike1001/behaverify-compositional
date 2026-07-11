@@ -77,7 +77,10 @@ Pre-computed contracts are already committed. Only needed for re-running CROWN f
 ```bash
 cd REPRODUCIBILITY/2026_TBA
 git clone https://github.com/Verified-Intelligence/alpha-beta-CROWN alpha-beta-CROWN
-pip install -r alpha-beta-CROWN/complete_verifier/requirements/requirements.txt
+cd alpha-beta-CROWN
+git checkout 6b8bbcf
+cd ..
+pip install -r alpha-beta-CROWN/complete_verifier/requirements.txt
 ```
 
 ---
