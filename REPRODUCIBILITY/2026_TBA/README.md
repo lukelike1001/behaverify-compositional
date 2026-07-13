@@ -79,9 +79,16 @@ cd REPRODUCIBILITY/2026_TBA
 git clone https://github.com/Verified-Intelligence/alpha-beta-CROWN alpha-beta-CROWN
 cd alpha-beta-CROWN
 git checkout 6b8bbcf
+git submodule update --init   # auto_LiRPA -- required, not a pip dependency
+pip install -e auto_LiRPA
+pip install -e .
 cd ..
-pip install -r alpha-beta-CROWN/complete_verifier/requirements.txt
 ```
+
+> **Note:** `pip install -e .` pulls in `torch<2.9.0`, which will **downgrade** an
+> existing newer torch/torchvision install at the user level. If other projects
+> on this machine depend on torch>=2.9, install into a dedicated venv instead
+> of the system/user environment.
 
 ---
 

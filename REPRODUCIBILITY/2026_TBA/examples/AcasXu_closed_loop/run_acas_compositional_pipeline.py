@@ -79,10 +79,10 @@ def _load_smv_vars(config_path: Path = DEFAULT_CONFIG) -> dict[str, str]:
     return {
         "command_prev":  smv.get("command_prev",  "command_stage_0"),
         "command_final": smv.get("command_final", "command_stage_5"),
-        "x_var":         smv.get("x_var",         "x_var_stage_0"),
-        "y_var":         smv.get("y_var",          "y_var_stage_0"),
-        "x_mult":        smv.get("x_mult",        "x_mult_stage_0"),
-        "y_mult":        smv.get("y_mult",        "y_mult_stage_0"),
+        "x_mag":         smv.get("x_mag",         "x_mag_stage_0"),
+        "y_mag":         smv.get("y_mag",         "y_mag_stage_0"),
+        "x_sign":        smv.get("x_sign",        "x_sign_stage_0"),
+        "y_sign":        smv.get("y_sign",        "y_sign_stage_0"),
         "heading":       smv.get("heading",       "heading_own_var_stage_0"),
     }
 
@@ -252,10 +252,10 @@ def _build_invar_lines(contracts: list[dict], smv_vars: dict[str, str]) -> list[
             cond = (
                 f"system.{smv_vars['command_prev']} = {ap} & "
                 f"system.{smv_vars['heading']} = {h} & "
-                f"system.{smv_vars['x_mult']} = {xm} & "
-                f"system.{smv_vars['y_mult']} = {ym} & "
-                f"system.{smv_vars['x_var']} = {x_mag} & "
-                f"system.{smv_vars['y_var']} = {y_mag}"
+                f"system.{smv_vars['x_sign']} = {xm} & "
+                f"system.{smv_vars['y_sign']} = {ym} & "
+                f"system.{smv_vars['x_mag']} = {x_mag} & "
+                f"system.{smv_vars['y_mag']} = {y_mag}"
             )
             lines.append(
                 f"INVAR ({cond}) -> system.{smv_vars['command_final']} != {fbd};"

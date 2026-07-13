@@ -1,0 +1,97 @@
+{
+  "description": "Decisive CEGAR corridor contracts for the simplified ACAS Xu closed loop. EMPIRICAL PRE-ANSWER (2026-07-12, ONNX forward passes on the repo's committed networks): Q1 is VIOLATED by the network (argmax=strong_right at (5,3,+,+,h=8), margin -0.0011: expect CROWN UNSAT with an immediate PGD counterexample). Q2 HOLDS (argmax=clear at the seed, margin +0.0146 vs strong_right: expect fast CROWN SAT). Therefore Q2 is the operative contract: obtain the CROWN certificate for id 2, inject ONE INVAR line at the seed (see invar_patch_snippet.smv), and the abstract model satisfies INVARSPEC (verified by direct model check, |R|=9220, zero unsafe states). Advisory index order confirmed against the committed acas_model_params.yaml and verify_acas_contracts.py (argmax semantics, clear=0 weak_left=1 weak_right=2 strong_left=3 strong_right=4).",
+  "contracts": [
+    {
+      "id": 1,
+      "type": "range",
+      "role": "Q1_expected_UNSAT_keep_for_paper_counterexample",
+      "heading_own_var": 8,
+      "x_sign": 1,
+      "y_sign": 1,
+      "a_prev": "strong_right",
+      "network_idx": 4,
+      "onnx": "aprev_strong_right.onnx",
+      "nn_input_lower": [
+        -0.3185661887456232,
+        -0.36398888888888886,
+        -0.4251,
+        -0.5728272727272727,
+        -0.47509999999999997
+      ],
+      "nn_input_upper": [
+        -0.3183661887456232,
+        -0.3637888888888889,
+        -0.4249,
+        -0.5726272727272728,
+        -0.4749
+      ],
+      "n_states_covered": 1,
+      "dangerous_xy": [
+        [
+          5,
+          3
+        ]
+      ],
+      "forbidden_advisory": "strong_right",
+      "forbidden_advisory_idx": 4,
+      "description": "CEGAR corridor contract (Q1_primary): NN_4 (a_prev=strong_right) at state (x=5,y=3,sx=+1,sy=+1,h=8) must not choose strong_right",
+      "empirical_forward_pass": {
+        "argmax": "strong_right",
+        "scores": [
+          0.5515,
+          0.5607,
+          0.5966,
+          0.5088,
+          0.5977
+        ],
+        "margin_vs_forbidden": -0.0011
+      }
+    },
+    {
+      "id": 2,
+      "type": "range",
+      "role": "Q2_OPERATIVE_expected_SAT",
+      "heading_own_var": 10,
+      "x_sign": 1,
+      "y_sign": 1,
+      "a_prev": "clear",
+      "network_idx": 1,
+      "onnx": "aprev_clear.onnx",
+      "nn_input_lower": [
+        -0.313587844542905,
+        -0.3862111111111111,
+        -0.3751,
+        -0.5728272727272727,
+        -0.47509999999999997
+      ],
+      "nn_input_upper": [
+        -0.313387844542905,
+        -0.38601111111111114,
+        -0.3749,
+        -0.5726272727272728,
+        -0.4749
+      ],
+      "n_states_covered": 1,
+      "dangerous_xy": [
+        [
+          7,
+          6
+        ]
+      ],
+      "forbidden_advisory": "strong_right",
+      "forbidden_advisory_idx": 4,
+      "description": "CEGAR corridor contract (Q2_fallback): NN_1 (a_prev=clear) at state (x=7,y=6,sx=+1,sy=+1,h=10) must not choose strong_right",
+      "empirical_forward_pass": {
+        "argmax": "clear",
+        "scores": [
+          0.2742,
+          0.257,
+          0.2644,
+          0.2272,
+          0.2597
+        ],
+        "margin_vs_forbidden": 0.0146
+      }
+    }
+  ]
+}

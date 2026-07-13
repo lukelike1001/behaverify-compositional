@@ -56,8 +56,8 @@ output_path: "contracts/crown/continuous_goals/enabled_pgd/aprev_clear_crown_res
 smv_variables:
   command_prev:  "command_stage_0"    # a_prev (which NN was last chosen)
   command_final: "command_stage_5"    # final NN output after tree execution
-  x_var:         "x_var_stage_0"
-  y_var:         "y_var_stage_0"
-  x_mult:        "x_mult_stage_0"    # x sign (+1 or -1)
-  y_mult:        "y_mult_stage_0"    # y sign (+1 or -1)
+  x_mag:         "x_mag_stage_0"
+  y_mag:         "y_mag_stage_0"
+  x_sign:        "x_sign_stage_0"    # x sign (+1 or -1)
+  y_sign:        "y_sign_stage_0"    # y sign (+1 or -1)
   heading:       "heading_own_var_stage_0"

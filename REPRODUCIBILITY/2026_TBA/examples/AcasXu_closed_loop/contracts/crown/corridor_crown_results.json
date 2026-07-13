@@ -1,0 +1,11 @@
+{
+  "description": "CROWN verification results for corridor_contracts.json. Only Q2 (id 2) was run: the termination theorem in 2026_07_12_inductive_invariant_stress_test.md guarantees at least one of Q1/Q2 holds, and Q2 verified SAT at the initial bound, so it is the operative contract. Q1 (id 1) was not run through CROWN -- its expected-UNSAT status in corridor_contracts.json is empirical (ONNX forward pass, margin -0.0011), not a CROWN certificate.",
+  "contracts": [
+    {
+      "id": 2,
+      "status": "SAT",
+      "verified_status": "safe",
+      "note": "verify_single_state.py --advisory clear --forbidden strong_right --x_mag 7 --y_mag 6 --x_sign 1 --y_sign 1 --heading 10; verified with initial CROWN bound, no PGD/branching needed"
+    }
+  ]
+}
