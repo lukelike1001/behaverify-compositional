@@ -34,6 +34,7 @@ grid_world/
 ├── grid_world_inductive_proof.py      # Hover-theorem / partition checks (GridWorldInductiveProof)
 ├── grid_world_contract_verifier.py    # CROWN discharge (GridWorldContractVerifier)
 ├── grid_world_smv_builder.py          # Contract-injected SMV (GridWorldSmvBuilder)
+├── grid_world_pipeline_context.py     # CLI path setup (GridWorldPipelineContext)
 ├── run_compositional_pipeline.py      # Single-network end-to-end compositional pipeline
 ├── run_all_compositional_pipelines.sh # Batch: run compositional pipeline for all networks in a contracts folder
 ├── run_all_monolithic_pipelines.sh    # Batch: run monolithic pipeline for all 7 networks

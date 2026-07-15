@@ -25,7 +25,7 @@ _TBA = (_HERE / "../../").resolve()
 if str(_TBA) not in sys.path:
     sys.path.insert(0, str(_TBA))
 
-from pipeline.resolve_pipeline_paths import self_rss_kb  # noqa: E402
+from pipeline.process_memory import ProcessMemory  # noqa: E402
 
 
 @dataclass
@@ -53,7 +53,7 @@ class GridWorldSmvBuilder:
         smv_cfg: dict[str, Any],
     ) -> GridWorldSmvBuilder:
         """
-        Assemble from pipeline setup() context and smv section of
+        Assemble from pipeline context dict and smv section of
         pipeline_filepaths_config.yaml (plus src_dir).
         """
         return cls(
@@ -105,7 +105,7 @@ class GridWorldSmvBuilder:
         )
 
         wall_sec = time.perf_counter() - t0
-        rss_after = self_rss_kb()
+        rss_after = ProcessMemory.peak_self_rss_kilobytes()
         _, peak_traced = tracemalloc.get_traced_memory()
         tracemalloc.stop()
 

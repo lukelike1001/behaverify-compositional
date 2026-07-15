@@ -44,10 +44,10 @@ _TBA  = (_HERE / "../../").resolve()   # 2026_TBA/
 if str(_TBA) not in sys.path:
     sys.path.insert(0, str(_TBA))
 
-from pipeline.symbolic.nuxmv.run_nuxmv_verification import run_nuxmv
-from pipeline.write_pipeline_report                import write_report
-from pipeline.resolve_pipeline_paths               import setup
+from pipeline.symbolic.nuxmv.nuxmv_verifier import NuxmvVerifier
+from pipeline.pipeline_report_writer import PipelineReportWriter
 from grid_world_contract_verifier import run_verification
+from grid_world_pipeline_context import GridWorldPipelineContext
 from grid_world_smv_builder import GridWorldSmvBuilder
 from grid_world_viability import load_config
 
@@ -110,45 +110,45 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = _build_parser().parse_args()
 
-    pipeline_start = time.perf_counter()
+    pipeline_start_time = time.perf_counter()
 
-    ctx = setup(args, _COUNTER_TEMPLATE)
+    context = GridWorldPipelineContext.from_cli_arguments(args, _COUNTER_TEMPLATE)
+    ctx = context.as_dict()
 
-    if ctx["skip_contracts"]:
+    if context.skip_contracts:
         print("\n[1/3] CONTRACT VERIFICATION — skipped (using existing JSON)")
-        with open(ctx["contracts_path"], encoding="utf-8") as f:
+        with open(context.contracts_path, encoding="utf-8") as f:
             summary = json.load(f).get("summary", {})
         contracts_metrics = {
             "wall_sec": 0.0, "peak_rss_kb": 0, "peak_traced_bytes": 0,
-            "sat":     summary.get("SAT", 0),
-            "unsat":   summary.get("UNSAT", 0),
+            "sat": summary.get("SAT", 0),
+            "unsat": summary.get("UNSAT", 0),
             "timeout": summary.get("TIMEOUT", 0),
-            "total":   summary.get("total", 0),
+            "total": summary.get("total", 0),
             "skipped": True,
         }
     else:
-        cfg = load_config(str(ctx["config_path"]))
+        cfg = load_config(str(context.config_path))
         # CROWN concatenates paths with string ops — absolute paths produce
         # doubled slashes. Provide CWD-relative paths instead.
-        cfg["onnx_path"] = os.path.relpath(ctx["onnx_path"])
-        cfg["output_path"] = os.path.relpath(ctx["contracts_path"])
+        cfg["onnx_path"] = os.path.relpath(context.onnx_path)
+        cfg["output_path"] = os.path.relpath(context.contracts_path)
         contracts_metrics = run_verification(cfg)
 
     smv_metrics = GridWorldSmvBuilder.from_pipeline_ctx(ctx, _SMV_CFG).generate()
-    nuxmv_metrics = run_nuxmv(ctx)
+    nuxmv_metrics = NuxmvVerifier.from_pipeline_context(ctx).run_and_collect_metrics()
 
-    write_report(
-        ctx["report_path"],
+    PipelineReportWriter.from_path(context.report_path).write(
         steps={
-            "contracts":          contracts_metrics,
-            "smv_generation":     smv_metrics,
+            "contracts": contracts_metrics,
+            "smv_generation": smv_metrics,
             "nuxmv_verification": nuxmv_metrics,
         },
-        total_wall_sec=time.perf_counter() - pipeline_start,
-        extra={
-            "network":   ctx["network_name"],
-            "onnx_path": str(ctx["onnx_path"]),
-            "tree_path": str(ctx["tree_path"]),
+        total_wall_seconds=time.perf_counter() - pipeline_start_time,
+        extra_fields={
+            "network": context.network_name,
+            "onnx_path": str(context.onnx_path),
+            "tree_path": str(context.tree_path),
         },
     )
 

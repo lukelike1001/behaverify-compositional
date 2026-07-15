@@ -5,7 +5,7 @@ Parallel wrapper for verify_acas_contracts.py.
 Splits TIMEOUT contracts across N worker processes and merges results.
 
 Thin wrapper: ACAS-specific logic (compute_nn_inputs, dangerous_xy iteration)
-is kept here.  CROWN invocation is delegated to pipeline/neuro/crown/crown_verification.py
+is kept here.  CROWN invocation is delegated to pipeline/neuro/crown/crown_verifier.py
 via lazy imports inside worker_fn (required for multiprocessing spawn context).
 
 Usage:
@@ -37,29 +37,26 @@ def worker_fn(args_tuple):
      timeout, device, worker_id, discrete, discrete_timeout) = args_tuple
 
     # Lazy imports so each process loads its own CROWN state.
-    # crown_verification imports abcrown, which must load in each worker process.
+    # crown_verifier imports abcrown, which must load in each worker process.
     import sys
     from pathlib import Path as _Path
     _tba = _Path(__file__).resolve().parents[2]
     if str(_tba) not in sys.path:
         sys.path.insert(0, str(_tba))
 
-    from pipeline.neuro.crown.crown_verification import (
-        build_crown_config,
-        run_crown_verification,
-    )
+    from pipeline.neuro.crown.crown_verifier import CrownVerifier
 
     if discrete:
         from generate_acas_contracts import compute_nn_inputs
 
-        crown_config = build_crown_config(
-            timeout=discrete_timeout,
+        crown_verifier = CrownVerifier.from_timeout_and_attack_settings(
+            timeout_seconds=discrete_timeout,
             pgd_order="before",
             device=device,
         )
 
-        x_sign      = contract_spec["x_sign"]
-        y_sign      = contract_spec["y_sign"]
+        x_sign = contract_spec["x_sign"]
+        y_sign = contract_spec["y_sign"]
         heading_var = contract_spec["heading_own_var"]
         timeout_seen = False
         status = "SAT"
@@ -68,13 +65,12 @@ def worker_fn(args_tuple):
         for x_mag, y_mag in contract_spec["dangerous_xy"]:
             exact = compute_nn_inputs(x_mag, y_mag, x_sign, y_sign, heading_var)
             try:
-                per_status, _ = run_crown_verification(
+                per_status, _ = crown_verifier.certify_network_never_selects_class(
                     onnx_path=onnx_path,
-                    lower=exact,
-                    upper=exact,
-                    forbidden_idx=forbidden_idx,
-                    num_classes=num_classes,
-                    crown_config=crown_config,
+                    input_lower_bounds=exact,
+                    input_upper_bounds=exact,
+                    forbidden_class_index=forbidden_idx,
+                    number_of_classes=num_classes,
                 )
             except Exception:
                 per_status = "TIMEOUT"
@@ -90,28 +86,27 @@ def worker_fn(args_tuple):
         wall_sec = time.perf_counter() - t0
 
     else:
-        crown_config = build_crown_config(
-            timeout=timeout,
+        crown_verifier = CrownVerifier.from_timeout_and_attack_settings(
+            timeout_seconds=timeout,
             pgd_order="before",
             device=device,
             extra_settings={
-                "bab__cut__enabled":      True,
-                "bab__cut__cplex_cuts":   False,
+                "bab__cut__enabled": True,
+                "bab__cut__cplex_cuts": False,
                 "bab__branching__method": "sb",
             },
         )
 
         t0 = time.perf_counter()
         try:
-            status, _ = run_crown_verification(
+            status, _ = crown_verifier.certify_network_never_selects_class(
                 onnx_path=onnx_path,
-                lower=contract_spec["nn_input_lower"],
-                upper=contract_spec["nn_input_upper"],
-                forbidden_idx=forbidden_idx,
-                num_classes=num_classes,
-                crown_config=crown_config,
+                input_lower_bounds=contract_spec["nn_input_lower"],
+                input_upper_bounds=contract_spec["nn_input_upper"],
+                forbidden_class_index=forbidden_idx,
+                number_of_classes=num_classes,
             )
-        except Exception as e:
+        except Exception:
             status = "TIMEOUT"
         wall_sec = time.perf_counter() - t0
 

@@ -5,7 +5,7 @@ Verify A/G safety contracts for the ACAS Xu closed-loop NSBT using alpha-beta-CR
 
 Thin wrapper: ACAS-specific logic is limited to input-space construction
 (compute_nn_inputs, dangerous_xy iteration).  All CROWN invocation, config
-building, and status normalization are delegated to pipeline/neuro/crown/crown_verification.py.
+building, and status normalization are delegated to pipeline/neuro/crown/crown_verifier.py.
 
 Contract semantics (range-based, analogous to grid-world single-call contracts):
   - Input region : nn_input_lower[i] <= x[i] <= nn_input_upper[i]  (5 inputs)
@@ -38,11 +38,7 @@ _TBA  = (_HERE / "../../").resolve()
 if str(_TBA) not in sys.path:
     sys.path.insert(0, str(_TBA))
 
-from pipeline.neuro.crown.crown_verification import (
-    build_crown_config,
-    normalize_status,
-    run_crown_verification,
-)
+from pipeline.neuro.crown.crown_verifier import CrownVerifier
 
 from generate_acas_contracts import compute_nn_inputs
 
@@ -65,7 +61,7 @@ def verify_contract_discrete(
     onnx_path: str,
     forbidden_idx: int,
     num_classes: int,
-    crown_config: Any,
+    crown_verifier: CrownVerifier,
 ) -> str:
     """
     Verify one contract in discrete mode: one CROWN call per dangerous state.
@@ -75,20 +71,19 @@ def verify_contract_discrete(
     Short-circuits on the first UNSAT. Returns TIMEOUT only if no UNSAT was found
     but at least one state timed out.
     """
-    x_sign      = contract["x_sign"]
-    y_sign      = contract["y_sign"]
+    x_sign = contract["x_sign"]
+    y_sign = contract["y_sign"]
     heading_var = contract["heading_own_var"]
     timeout_seen = False
 
     for x_mag, y_mag in contract["dangerous_xy"]:
         exact = compute_nn_inputs(x_mag, y_mag, x_sign, y_sign, heading_var)
-        status, _ = run_crown_verification(
+        status, _ = crown_verifier.certify_network_never_selects_class(
             onnx_path=onnx_path,
-            lower=exact,
-            upper=exact,
-            forbidden_idx=forbidden_idx,
-            num_classes=num_classes,
-            crown_config=crown_config,
+            input_lower_bounds=exact,
+            input_upper_bounds=exact,
+            forbidden_class_index=forbidden_idx,
+            number_of_classes=num_classes,
         )
         if status == "UNSAT":
             return "UNSAT"
@@ -98,15 +93,15 @@ def verify_contract_discrete(
     return "TIMEOUT" if timeout_seen else "SAT"
 
 
-# ---------------------------------------------------------------------------
-# CROWN config builder (ACAS-specific defaults)
-# ---------------------------------------------------------------------------
-
-def _build_crown_cfg(cfg: dict[str, Any], timeout_override: float | None = None) -> Any:
-    timeout = timeout_override if timeout_override is not None \
+def _make_crown_verifier(
+    cfg: dict[str, Any], timeout_override: float | None = None,
+) -> CrownVerifier:
+    timeout_seconds = (
+        timeout_override if timeout_override is not None
         else cfg["verification"]["timeout_sec"]
-    return build_crown_config(
-        timeout=timeout,
+    )
+    return CrownVerifier.from_timeout_and_attack_settings(
+        timeout_seconds=timeout_seconds,
         pgd_order="skip",
         device="cpu",
     )
@@ -203,13 +198,13 @@ def run_verification(
     if discrete:
         dt = cfg.get("discrete_timeout",
                      cfg["verification"].get("discrete_timeout_sec", 5.0))
-        crown_config = _build_crown_cfg(cfg, timeout_override=dt)
-        eps      = cfg["verification"].get("discrete_state_eps", 0.0)
+        crown_verifier = _make_crown_verifier(cfg, timeout_override=dt)
+        eps = cfg["verification"].get("discrete_state_eps", 0.0)
         mode_str = f"discrete, EPS={eps}, timeout={dt}s per state"
         print(f"Verifying {len(contracts)} contracts for NN_{nn_idx} ({onnx_path})")
         print(f"Mode: {mode_str}\n")
     else:
-        crown_config = _build_crown_cfg(cfg, timeout_override=timeout_override)
+        crown_verifier = _make_crown_verifier(cfg, timeout_override=timeout_override)
         mode_str = "continuous"
         print(f"Verifying {len(contracts)} contracts for NN_{nn_idx} ({onnx_path})")
         print(f"Timeout: {timeout}s per contract\n")
@@ -228,16 +223,15 @@ def run_verification(
                 onnx_path=onnx_path,
                 forbidden_idx=contract["forbidden_advisory_idx"],
                 num_classes=num_classes,
-                crown_config=crown_config,
+                crown_verifier=crown_verifier,
             )
         else:
-            status, _ = run_crown_verification(
+            status, _ = crown_verifier.certify_network_never_selects_class(
                 onnx_path=onnx_path,
-                lower=contract["nn_input_lower"],
-                upper=contract["nn_input_upper"],
-                forbidden_idx=contract["forbidden_advisory_idx"],
-                num_classes=num_classes,
-                crown_config=crown_config,
+                input_lower_bounds=contract["nn_input_lower"],
+                input_upper_bounds=contract["nn_input_upper"],
+                forbidden_class_index=contract["forbidden_advisory_idx"],
+                number_of_classes=num_classes,
             )
         wall_sec = time.perf_counter() - t0
 

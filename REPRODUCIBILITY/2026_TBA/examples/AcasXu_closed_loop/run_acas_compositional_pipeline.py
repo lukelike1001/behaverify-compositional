@@ -9,9 +9,9 @@ Stages:
   3. [PATCH]    Replace 5 NN lookup-table DEFINE blocks with non-deterministic VAR +
                 INVAR constraints derived from the verified A/G contracts JSON
   4. [VERIFY]   Run nuXmv to check INVARSPEC (distance >= 200)
-                Delegates to pipeline/symbolic/nuxmv/run_nuxmv_verification.py
+                Delegates to pipeline/symbolic/nuxmv/nuxmv_verifier.py (NuxmvVerifier)
   5. [REPORT]   Write JSON report with per-step timing and verdicts
-                Delegates to pipeline/write_pipeline_report.py
+                Delegates to pipeline/pipeline_report_writer.py (PipelineReportWriter)
 
 SMV variable names are read from verify_acas_contracts_config.yaml (smv_variables section)
 rather than hardcoded in this script.
@@ -49,9 +49,9 @@ _TBA  = (_HERE / "../../").resolve()
 if str(_TBA) not in sys.path:
     sys.path.insert(0, str(_TBA))
 
-from pipeline.symbolic.nuxmv.run_nuxmv_verification import run_nuxmv
-from pipeline.write_pipeline_report                import write_report
-from pipeline.resolve_pipeline_paths               import self_rss_kb, children_rss_kb
+from pipeline.symbolic.nuxmv.nuxmv_verifier import NuxmvVerifier
+from pipeline.pipeline_report_writer import PipelineReportWriter
+from pipeline.process_memory import ProcessMemory
 
 try:
     import resource as _resource
@@ -154,7 +154,7 @@ def run_smv_generation(ctx: dict) -> dict:
     wall_sec = time.perf_counter() - t0
     _, peak_traced = tracemalloc.get_traced_memory()
     tracemalloc.stop()
-    rss = self_rss_kb()
+    rss = ProcessMemory.peak_self_rss_kilobytes()
 
     smv_lines = ctx["base_smv_path"].read_text().count("\n")
     print(f"  Generated {ctx['base_smv_path']}  ({wall_sec:.1f}s, {smv_lines} lines)")
@@ -357,23 +357,22 @@ def main() -> None:
 
     t_start = time.perf_counter()
 
-    tree_metrics  = run_tree_generation(ctx)
-    smv_metrics   = run_smv_generation(ctx)
+    tree_metrics = run_tree_generation(ctx)
+    smv_metrics = run_smv_generation(ctx)
     patch_metrics = run_smv_patch(ctx, smv_vars)
-    nuxmv_metrics = run_nuxmv(ctx)
+    nuxmv_metrics = NuxmvVerifier.from_pipeline_context(ctx).run_and_collect_metrics()
 
     total = time.perf_counter() - t_start
 
-    write_report(
-        ctx["report_path"],
+    PipelineReportWriter.from_path(ctx["report_path"]).write(
         steps={
-            "tree":      tree_metrics,
-            "smv":       smv_metrics,
+            "tree": tree_metrics,
+            "smv": smv_metrics,
             "smv_patch": patch_metrics,
-            "nuxmv":     nuxmv_metrics,
+            "nuxmv": nuxmv_metrics,
         },
-        total_wall_sec=total,
-        extra={"contracts_path": str(ctx["contracts_path"])},
+        total_wall_seconds=total,
+        extra_fields={"contracts_path": str(ctx["contracts_path"])},
     )
 
 

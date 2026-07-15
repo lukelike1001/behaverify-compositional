@@ -26,7 +26,6 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
-import resource
 import sys
 import time
 import tracemalloc
@@ -39,10 +38,8 @@ _TBA = (_HERE / "../../").resolve()
 if str(_TBA) not in sys.path:
     sys.path.insert(0, str(_TBA))
 
-from pipeline.neuro.crown.crown_verification import (  # noqa: E402
-    build_crown_config,
-    run_crown_verification,
-)
+from pipeline.neuro.crown.crown_verifier import CrownVerifier  # noqa: E402
+from pipeline.process_memory import ProcessMemory  # noqa: E402
 
 from grid_world_viability import (  # noqa: E402
     GridWorldContract,
@@ -54,10 +51,6 @@ from grid_world_viability import (  # noqa: E402
 DISCRETE_GOAL_DEFAULT_TIMEOUT_SEC: float = 5.0
 # eps=0.0 is safe in practice when PGD resolves before BaB; use 1e-5 if NaNs appear.
 DISCRETE_GOAL_EPS: float = 0.0
-
-
-def _self_rss_kb() -> int:
-    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
 
 def _extract_counterexample(result: Any) -> list[float] | None:
@@ -130,10 +123,10 @@ class GridWorldContractVerifier:
             contracts=contracts,
         )
 
-    def _crown_config(self) -> Any:
-        timeout = self.discrete_timeout if self.discrete else self.timeout_sec
-        return build_crown_config(
-            timeout=timeout,
+    def _make_crown_verifier(self) -> CrownVerifier:
+        timeout_seconds = self.discrete_timeout if self.discrete else self.timeout_sec
+        return CrownVerifier.from_timeout_and_attack_settings(
+            timeout_seconds=timeout_seconds,
             pgd_order=self.pgd_order,
             device=self.device,
         )
@@ -155,22 +148,21 @@ class GridWorldContractVerifier:
     def certify_continuous(
         self,
         contract: GridWorldContract,
-        crown_config: Any | None = None,
+        crown_verifier: CrownVerifier | None = None,
     ) -> tuple[str, list[float] | None]:
         """One CROWN call: drone near source, goal over the full continuous grid."""
-        if crown_config is None:
-            crown_config = self._crown_config()
+        if crown_verifier is None:
+            crown_verifier = self._make_crown_verifier()
         cx, cy = contract.source
         d = self.domain
         lower = [cx - self.eps, cy - self.eps, d.grid_min, d.grid_min]
         upper = [cx + self.eps, cy + self.eps, d.grid_max, d.grid_max]
-        status, result = run_crown_verification(
-            self.onnx_path,
-            lower,
-            upper,
-            contract.forbidden_dir_idx,
-            self.num_classes,
-            crown_config,
+        status, result = crown_verifier.certify_network_never_selects_class(
+            onnx_path=self.onnx_path,
+            input_lower_bounds=lower,
+            input_upper_bounds=upper,
+            forbidden_class_index=contract.forbidden_dir_idx,
+            number_of_classes=self.num_classes,
         )
         ce = _extract_counterexample(result) if status == "UNSAT" else None
         return status, ce
@@ -178,14 +170,14 @@ class GridWorldContractVerifier:
     def certify_discrete(
         self,
         contract: GridWorldContract,
-        crown_config: Any | None = None,
+        crown_verifier: CrownVerifier | None = None,
     ) -> tuple[str, list[float] | None]:
         """
         CROWN once per integer goal; short-circuit on first UNSAT.
         TIMEOUT if no UNSAT but at least one call timed out.
         """
-        if crown_config is None:
-            crown_config = self._crown_config()
+        if crown_verifier is None:
+            crown_verifier = self._make_crown_verifier()
         cx, cy = contract.source
         d = self.domain
         timeout_seen = False
@@ -199,13 +191,12 @@ class GridWorldContractVerifier:
                     cx + self.eps, cy + self.eps,
                     gx + DISCRETE_GOAL_EPS, gy + DISCRETE_GOAL_EPS,
                 ]
-                status, result = run_crown_verification(
-                    self.onnx_path,
-                    lower,
-                    upper,
-                    contract.forbidden_dir_idx,
-                    self.num_classes,
-                    crown_config,
+                status, result = crown_verifier.certify_network_never_selects_class(
+                    onnx_path=self.onnx_path,
+                    input_lower_bounds=lower,
+                    input_upper_bounds=upper,
+                    forbidden_class_index=contract.forbidden_dir_idx,
+                    number_of_classes=self.num_classes,
                 )
                 if status == "UNSAT":
                     return "UNSAT", _extract_counterexample(result)
@@ -216,12 +207,12 @@ class GridWorldContractVerifier:
     def certify(
         self,
         contract: GridWorldContract,
-        crown_config: Any | None = None,
+        crown_verifier: CrownVerifier | None = None,
     ) -> tuple[str, list[float] | None]:
         """Discharge one contract in the verifier's configured mode."""
         if self.discrete:
-            return self.certify_discrete(contract, crown_config)
-        return self.certify_continuous(contract, crown_config)
+            return self.certify_discrete(contract, crown_verifier)
+        return self.certify_continuous(contract, crown_verifier)
 
     def certify_all(self, *, write_json: bool = True, verbose: bool = True) -> dict[str, Any]:
         """
@@ -252,13 +243,13 @@ class GridWorldContractVerifier:
             print(f"{'#':<4} {'Description':<45} {'Status':<10} {'Marker'}")
             print("-" * 75)
 
-        crown_config = self._crown_config()
+        crown_verifier = self._make_crown_verifier()
         tracemalloc.start()
         t0 = time.perf_counter()
         records: list[dict[str, Any]] = []
 
         for i, contract in enumerate(self.contracts):
-            status, counterexample = self.certify(contract, crown_config)
+            status, counterexample = self.certify(contract, crown_verifier)
             if verbose:
                 print(
                     f"{i + 1:<4} {contract.description:<45} "
@@ -282,7 +273,7 @@ class GridWorldContractVerifier:
             records.append(rec)
 
         wall_sec = time.perf_counter() - t0
-        rss_after = _self_rss_kb()
+        rss_after = ProcessMemory.peak_self_rss_kilobytes()
         _, peak_traced = tracemalloc.get_traced_memory()
         tracemalloc.stop()
 
