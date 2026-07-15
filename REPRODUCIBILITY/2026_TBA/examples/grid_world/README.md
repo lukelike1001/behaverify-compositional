@@ -30,10 +30,10 @@ grid_world/
 │   │   └── discrete_goals/
 │   └── monolithic/        # nuXmv output from the 2025_NEUS table approach
 ├── figures/               # Generated figures and scripts — see figures/README.md
-├── generate_grid_world_contracts.py   # Generate contract specs from obstacle config (no CROWN)
-├── convert_contracts_to_smv.py        # Convert verified contracts → contract-injected SMV
-├── verify_grid_world_contracts.py     # Verify contracts via CROWN (called by the shell script below)
-├── verify_grid_world_contracts.sh     # Batch: verify all 7 NNs (--mode and --neuro flags)
+├── grid_world_viability.py            # Domain physics, viability kernel V, ∂V contracts (no CROWN)
+├── grid_world_inductive_proof.py      # Hover-theorem / partition checks (GridWorldInductiveProof)
+├── grid_world_contract_verifier.py    # CROWN discharge (GridWorldContractVerifier)
+├── grid_world_smv_builder.py          # Contract-injected SMV (GridWorldSmvBuilder)
 ├── run_compositional_pipeline.py      # Single-network end-to-end compositional pipeline
 ├── run_all_compositional_pipelines.sh # Batch: run compositional pipeline for all networks in a contracts folder
 ├── run_all_monolithic_pipelines.sh    # Batch: run monolithic pipeline for all 7 networks
@@ -71,8 +71,8 @@ resolve paths relative to the current working directory.
 
 ### Quick Start (using pre-computed contracts)
 
-Note: `--skip-contracts` bypasses `verify_grid_world_contracts.py` entirely — the pre-computed
-JSON is used directly. PGD only matters when re-running contract verification from scratch.
+Note: `--skip-contracts` bypasses CROWN entirely — the pre-computed JSON is used
+directly. PGD only matters when re-running contract verification from scratch.
 
 ```bash
 # Unsafe network (0995, ~99.5% accuracy) -- expect INVAR=false
@@ -102,17 +102,32 @@ wall time, peak memory, contract counts, and nuXmv verdict.
 
 ### Full Pipeline (re-verifying contracts via CROWN)
 
-Re-run contract verification with PGD enabled (recommended):
+Re-run contract verification with PGD enabled (recommended). Contracts are the
+kernel-boundary set from `grid_world_viability.generate_contracts()`; CROWN is
+driven by `GridWorldContractVerifier`:
 
 ```bash
-python verify_grid_world_contracts.py \
+python grid_world_contract_verifier.py \
     --onnx networks/1000__6_18_0__0100_1.onnx \
     --output contracts/crown/continuous_goals/enabled_pgd/1000__6_18_0__0100_1_pgd60.json
 ```
 
-> The `_pgd60` suffix reflects `timeout_sec: 60` in `grid_world_domain_config.yaml`.
-> `verify_grid_world_contracts.sh` reads this value at runtime, so changing `timeout_sec`
-> automatically produces a different suffix (e.g., `_pgd120` for `timeout_sec: 120`).
+Other modes:
+
+```bash
+# BaB only (no PGD)
+python grid_world_contract_verifier.py --no-pgd \
+    --onnx networks/1000__6_18_0__0100_1.onnx \
+    --output contracts/crown/continuous_goals/disabled_pgd/1000__6_18_0__0100_1.json
+
+# Discrete integer goals (replicates 2025_NEUS-style point checks)
+python grid_world_contract_verifier.py --discrete \
+    --onnx networks/1000__6_18_0__0100_1.onnx \
+    --output contracts/crown/discrete_goals/1000__6_18_0__0100_1_discrete.json
+```
+
+> The `_pgd60` suffix is a naming convention matching `timeout_sec: 60` in
+> `grid_world_domain_config.yaml` (not applied automatically by the CLI).
 
 Then run the pipeline:
 
@@ -123,24 +138,10 @@ python run_compositional_pipeline.py \
     --contracts contracts/crown/continuous_goals/enabled_pgd/1000__6_18_0__0100_1_pgd60.json
 ```
 
-### Batch Verification (all NNs)
-
-All three verification modes (continuous PGD, continuous BaB, discrete) are handled by
-the unified `verify_grid_world_contracts.sh` script. The `--neuro` flag sets the NN verifier
-name used as the `contracts/<neuro>/` path prefix, making it easy to add future verifiers.
+Kernel / hover checks (no CROWN, no ONNX):
 
 ```bash
-# PGD-enabled (recommended) → contracts/crown/continuous_goals/enabled_pgd/
-./verify_grid_world_contracts.sh
-
-# BaB-only baseline (no PGD) → contracts/crown/continuous_goals/disabled_pgd/
-./verify_grid_world_contracts.sh --mode continuous-bab
-
-# Discrete integer-point check → contracts/crown/discrete_goals/
-./verify_grid_world_contracts.sh --mode discrete
-
-# Future verifier (nnv) → contracts/nnv/continuous_goals/enabled_pgd/
-./verify_grid_world_contracts.sh --neuro nnv
+python grid_world_inductive_proof.py
 ```
 
 ---

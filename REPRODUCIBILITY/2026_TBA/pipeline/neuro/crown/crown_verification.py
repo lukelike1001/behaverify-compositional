@@ -6,7 +6,7 @@ Provides the core verification primitives used by all example scripts:
     build_crown_config()    construct an ABCrown ConfigBuilder result
     run_crown_verification() build spec and call CROWN for one lower/upper region
 
-Example scripts (verify_acas_contracts.py, verify_grid_world_contracts.py) are
+Example scripts (verify_acas_contracts.py, grid_world_contract_verifier.py) are
 thin wrappers that construct the example-specific lower/upper arrays and call
 run_crown_verification().  This module contains no example-specific logic.
 

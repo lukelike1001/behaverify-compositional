@@ -47,8 +47,9 @@ if str(_TBA) not in sys.path:
 from pipeline.symbolic.nuxmv.run_nuxmv_verification import run_nuxmv
 from pipeline.write_pipeline_report                import write_report
 from pipeline.resolve_pipeline_paths               import setup
-from convert_contracts_to_smv                      import run_smv_generation
-import verify_grid_world_contracts as _vc
+from grid_world_contract_verifier import run_verification
+from grid_world_smv_builder import GridWorldSmvBuilder
+from grid_world_viability import load_config
 
 
 # ---------------------------------------------------------------------------
@@ -71,13 +72,13 @@ _DEFAULT_NUXMV_CMD = (_HERE / _paths["nuxmv_cmd"]).resolve()
 _DEFAULT_METAMODEL = (_HERE / _paths["metamodel"]).resolve()
 _COUNTER_TEMPLATE  = (_HERE / _paths["counter_template"]).resolve()
 
-# SMV converter arguments — passed through to convert_contracts_to_smv, not hardcoded there
+# SMV symbol names / BehaVerify src — passed into GridWorldSmvBuilder
 _SMV_CFG = {
     "neural_var": _smv["neural_var"],
-    "pos_x":      _smv["pos_x"],
-    "pos_y":      _smv["pos_y"],
-    "domain":     _smv["domain"],
-    "src_dir":    str((_HERE / "../../src").resolve()),
+    "pos_x": _smv["pos_x"],
+    "pos_y": _smv["pos_y"],
+    "domain": _smv["domain"],
+    "src_dir": str((_HERE / "../../src").resolve()),
 }
 
 
@@ -126,14 +127,14 @@ def main() -> None:
             "skipped": True,
         }
     else:
-        cfg = _vc.load_config(str(ctx["config_path"]))
+        cfg = load_config(str(ctx["config_path"]))
         # CROWN concatenates paths with string ops — absolute paths produce
         # doubled slashes. Provide CWD-relative paths instead.
-        cfg["onnx_path"]   = os.path.relpath(ctx["onnx_path"])
+        cfg["onnx_path"] = os.path.relpath(ctx["onnx_path"])
         cfg["output_path"] = os.path.relpath(ctx["contracts_path"])
-        contracts_metrics = _vc.run_verification(cfg)
+        contracts_metrics = run_verification(cfg)
 
-    smv_metrics   = run_smv_generation(ctx, _SMV_CFG)
+    smv_metrics = GridWorldSmvBuilder.from_pipeline_ctx(ctx, _SMV_CFG).generate()
     nuxmv_metrics = run_nuxmv(ctx)
 
     write_report(
