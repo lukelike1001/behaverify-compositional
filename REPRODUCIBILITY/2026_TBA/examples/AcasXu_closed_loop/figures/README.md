@@ -20,7 +20,7 @@ python3 figures/image_scripts/acas_contract_explorer.py
 # → open http://localhost:7860 in your browser
 ```
 
-The app opens a 2×2 interactive dashboard — no CROWN or nuXmv needed.
+The app opens an interactive dashboard — no CROWN or nuXmv needed.
 See [the app section below](#acas_contract_explorerpyinteractive-app) for full details.
 
 ---
@@ -29,15 +29,13 @@ See [the app section below](#acas_contract_explorerpyinteractive-app) for full d
 
 ```
 figures/
-├── image_scripts/
-│   ├── acas_contract_explorer.py     # Interactive Gradio demo app  ← start here
-│   ├── acas_discrete_vs_continuous.py  # Static 3-panel comparison figure
-│   ├── acas_input_region.py          # Physical + NN input space for one contract
-│   └── acas_output_property.py       # Output scores for SAT and UNSAT contracts
-├── acas_discrete_vs_continuous.png   # Generated output
-├── acas_input_region.png             # Generated output
-└── acas_output_property.png          # Generated output
+└── image_scripts/
+    └── acas_contract_explorer.py     # Interactive Gradio demo app  ← start here
 ```
+
+The interactive app below is the successor to (and replaces) three earlier static-figure
+scripts (`acas_discrete_vs_continuous.py`, `acas_input_region.py`, `acas_output_property.py`)
+that have been removed.
 
 ---
 
@@ -49,23 +47,51 @@ fastest way to build intuition for how the compositional pipeline works.
 
 ### What it shows
 
-The UI is a 2×2 grid:
+The UI has one flagship panel (with a click-to-inspect grid alongside it), then
+two more panels side by side:
 
-| | Left | Right |
-|---|---|---|
-| **Top** | Original physical state space | Normalized physical state space |
-| **Bottom** | NN input space (continuous / discrete / both) | Contract details table |
+**1 — Original physical space:** The full signed `(x, y)` plane as
+the intruder sees it. The active quadrant is highlighted in yellow; a dashed
+gray circle marks the danger zone (ρ < 200 ft); a heading arrow from the
+origin shows the ownship's current heading. Interactive (zoom/pan/hover) via
+Plotly.
+- **Viability** (always on) — a 4-category heatmap fill (Interior / Boundary /
+  Safe-but-doomed / Unsafe) over the physical state space, computed once from
+  the physics alone (no networks). This is the ground truth for whether a state
+  is currently safe (ρ ≥ 200 ft), so it isn't an optional overlay -- there's no
+  reading of this panel that makes sense without it.
+- **Reachability** (togglable) — a solid outline traced around the region
+  reachable from the closed loop's fixed initial condition, for the
+  currently-selected network. Composable with the `B_R` and `Reach_true`
+  marker toggles.
 
-**Original physical space (top-left):** The full signed `(x, y)` plane as the
-intruder sees it. The active quadrant is highlighted in yellow; safe integer
-states appear as small green dots; dangerous states are large red dots. A
-heading arrow from the origin shows the ownship's current heading.
+(An earlier version of this panel also drew each contract's own safe/dangerous
+states as green/red dots. That was removed: "dangerous" there meant "choosing
+this contract's specific forbidden advisory from here causes ρ < 200 next
+tick," a one-step-lookahead notion tied to one specific contract that excluded
+already-unsafe states outright — a different, narrower question than the
+Viability overlay's "Unsafe" category, and showing both invited exactly that
+confusion.)
 
-**Normalized physical space (top-right):** The canonical relative-coordinate
-view: ownship always at origin, axes in magnitude units (× 100 ft). Unsafe
-safety circle (< 200 ft radius) shown in red.
+**Inspect a cell (next to Panel 1):** Type an `x_mag`/`y_mag` pair (each in
+`[0, 10]`, guard-checked -- out-of-range or empty input reports an error
+instead of silently clamping) and click **Inspect** (or press Enter in either
+field) to populate the **Cell Detail** panel below with category-specific
+justification for that cell, under the current heading/quadrant/a_prev/
+selected-contract slice:
+- **Unsafe** — the ρ < 200 ft inequality for that cell.
+- **Interior** — the trivial ρ ≥ 200 ft fact.
+- **Boundary** — the safe advisories (`Allowed_V`) vs. the one forbidden
+  choice, showing exactly where that choice leads and why it's unsafe.
+- **Safe-but-doomed** — a concrete example trace, walked deterministically
+  via the physics alone, showing the state is unsafe no matter which
+  advisories are chosen from here on.
 
-**NN input space (bottom-left):** The CROWN verification region drawn over
+(An earlier version used a clickable 11×11 grid instead of typed coordinates.
+It was retired because the grid's screen-space rows/columns didn't line up
+with Panel 1's signed, zoomed axes, making clicks land on the wrong cell.)
+
+**2 — NN input space:** The CROWN verification region drawn over
 NN inputs 1 (normalized distance) and 2 (normalized relative angle):
 - **Continuous mode** — filled blue bounding box; one CROWN call covers the
   entire shaded region including non-integer states between grid points.
@@ -76,9 +102,10 @@ NN inputs 1 (normalized distance) and 2 (normalized relative angle):
 Dragging the **eps** slider grows or shrinks the bounding box margin live, so
 you can see exactly how eps affects the over-approximation.
 
-**Contract details (bottom-right):** A Gradio table listing the contract id,
-heading, quadrant, forbidden advisory, state count, and all five NN input
-bounds for the selected contract.
+**3 — Contract details:** A table listing the contract id, heading, quadrant,
+forbidden advisory, state count, and all five NN input bounds for the selected
+contract, plus a region-info readout (interior/boundary/doomed/unsafe/reachable/
+`B_R` cell counts for the currently-selected slice).
 
 ### Controls
 
@@ -104,101 +131,9 @@ python3 figures/image_scripts/acas_contract_explorer.py
 
 | Flag | Default | Description |
 |---|---|---|
-| `--specs` | `contracts/continuous_goals/contract_specs_eps1e4.json` | Contract spec JSON |
+| `--specs` | `contracts/crown/continuous_goals/contract_specs_eps1e4.json` | Contract spec JSON |
 | `--port` | `7860` | Gradio server port |
-| `--no-browser` | *(flag)* | Do not auto-open browser tab |
+| `--share` | *(flag)* | Create a public shareable Gradio link |
 
-**Requirements:** `gradio`, `matplotlib`, `numpy`, `yaml` (no CROWN or nuXmv needed).
+**Requirements:** `gradio>=6.0.0`, `plotly`, `yaml` (no CROWN or nuXmv needed).
 
----
-
-## `acas_discrete_vs_continuous.py` — Static comparison figure
-
-Three-panel figure contrasting continuous and discrete contract verification
-for a single representative contract.
-
-- **Left — Physical state space:** Dangerous intruder positions and safety boundary.
-- **Middle — Continuous NN input space:** One CROWN call covers the entire bounding
-  box, including non-integer states between the grid points.
-- **Right — Discrete NN input space:** One CROWN call per exact integer dangerous
-  state; a faint ghost box shows how much space the discrete checks leave uncovered
-  relative to the continuous over-approximation.
-
-Panels 2 and 3 share identical axis ranges for direct visual comparison.
-
-**Generate:**
-
-```bash
-cd REPRODUCIBILITY/2026_TBA/examples/AcasXu_closed_loop
-python3 figures/image_scripts/acas_discrete_vs_continuous.py
-```
-
-**Options:**
-
-| Flag | Default | Description |
-|---|---|---|
-| `--specs` | `contracts/continuous_goals/contract_specs_eps1e4.json` | Contract spec JSON |
-| `--output` | `figures/acas_discrete_vs_continuous.png` | Output image path |
-| `--contract-id` | *(auto: first with ≥ 5 states)* | Specific contract id to visualize |
-
----
-
-## `acas_input_region.py` — Single-contract static figure
-
-Two-panel visualization of a single A/G contract:
-
-- **Left — Physical state space:** 10×10 (x\_var, y\_var) grid. Green cells are safe
-  (distance ≥ 200 ft), red cells are already-unsafe states. Red dots mark the
-  dangerous states covered by the contract; the dashed circle marks the 200 ft
-  safety boundary. The ownship sits at the origin.
-
-- **Right — Normalized NN input space:** The CROWN bounding box is drawn as a blue
-  rectangle over inputs 1 (normalized distance) and 2 (normalized relative angle).
-  Inputs 3–5 are constants for this contract and are listed in the annotation box.
-
-**Generate:**
-
-```bash
-cd REPRODUCIBILITY/2026_TBA/examples/AcasXu_closed_loop
-python3 figures/image_scripts/acas_input_region.py
-```
-
-**Options:**
-
-| Flag | Default | Description |
-|---|---|---|
-| `--specs` | `contracts/continuous_goals/contract_specs_eps1e4.json` | Contract spec JSON |
-| `--output` | `figures/acas_input_region.png` | Output image path |
-| `--contract-id` | *(auto: first with ≥ 5 states)* | Specific contract id to visualize |
-
----
-
-## `acas_output_property.py` — NN output scores figure
-
-Two-panel bar chart showing the NN output scores for a **SAT** and an **UNSAT**
-contract, illustrating concretely what CROWN is verifying.
-
-- **Left (SAT):** Evaluates the centroid of a SAT contract's bounding box. The
-  forbidden advisory (red bar) is never the argmax — the safety property holds.
-- **Right (UNSAT):** Samples 500 random inputs from an UNSAT contract's bounding
-  box and picks the one where the forbidden advisory scores highest. Shows a
-  concrete witness where the NN would choose the forbidden advisory.
-
-Requires `onnxruntime` (`pip install onnxruntime`).
-
-**Generate:**
-
-```bash
-cd REPRODUCIBILITY/2026_TBA/examples/AcasXu_closed_loop
-python3 figures/image_scripts/acas_output_property.py
-```
-
-**Options:**
-
-| Flag | Default | Description |
-|---|---|---|
-| `--results` | `contracts/continuous_goals/enabled_pgd/aprev_clear_crown_results.json` | CROWN results JSON for NN_1 |
-| `--specs` | `contracts/continuous_goals/contract_specs_eps1e4.json` | Contract spec JSON (for bounding boxes) |
-| `--output` | `figures/acas_output_property.png` | Output image path |
-| `--seed` | `42` | RNG seed for reproducible UNSAT sampling |
-| `--n-samples` | `500` | Random inputs sampled when searching for UNSAT witness |

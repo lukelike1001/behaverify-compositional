@@ -58,6 +58,15 @@ def reachable_dangerous_xy(contract: dict, advisory: str, reachable: set[Augment
     ]
 
 
+def reachable_physical_by_aprev(reachable: set[AugmentedState]) -> dict[str, frozenset[tuple[int, int, int, int, int]]]:
+    """Regroup a reachable augmented-state set by a_prev, dropping the a_prev field
+    itself -- gives, for each network, the physical states reachable while it's active."""
+    by_aprev: dict[str, set] = {a: set() for a in ADVISORIES}
+    for *phys, a_prev in reachable:
+        by_aprev[a_prev].add(tuple(phys))
+    return {a: frozenset(states) for a, states in by_aprev.items()}
+
+
 if __name__ == "__main__":
     reachable = compute_reachable_states()
     print(f"{len(reachable)} reachable states out of 96,800 possible")

@@ -6,4 +6,10 @@
 # Install these after the base install:
 #   pip install -r REPRODUCIBILITY/2026_TBA/requirements.txt
 
-gradio>=4.0.0
+# >=6.0.0: acas_contract_explorer.py's Plotly panels rely on gr.Plot() serializing
+# go.Figure to real interactive plotly.js (verified against 6.20.0); older gradio
+# may not render them the same way.
+gradio>=6.0.0
+
+# acas_contract_explorer.py's panels (interactive zoom/pan/hover)
+plotly>=5.24

@@ -64,10 +64,7 @@ AcasXu_closed_loop/
 │   └── smv/                               # Generated base SMV (reused via --skip-smv)
 ├── figures/                                # Visualization scripts and outputs
 │   ├── image_scripts/
-│   │   ├── acas_contract_explorer.py       # Interactive Gradio demo (start here)
-│   │   ├── acas_discrete_vs_continuous.py  # Static 3-panel comparison figure
-│   │   ├── acas_input_region.py            # Single-contract static figure
-│   │   └── acas_output_property.py         # NN output bar charts
+│   │   └── acas_contract_explorer.py       # Interactive Gradio demo (start here)
 │   └── figures/README.md                   # Figure documentation
 ├── tree/                                   # Generated tree file (reused via --skip-tree)
 ├── acas_template_360.tree                  # Template for the closed-loop model

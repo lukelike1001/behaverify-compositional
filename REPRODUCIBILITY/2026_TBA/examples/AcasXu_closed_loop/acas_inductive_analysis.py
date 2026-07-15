@@ -24,25 +24,13 @@ Run from examples/AcasXu_closed_loop/:
 Every printed [CHECK] line is an assertion of a claim in the companion report.
 """
 
-import itertools
 from collections import Counter
 
-import generate_acas_contracts as g
 from acas_reachability import _initial_state, compute_reachable_states
+from acas_viability import ADVISORIES, ALL_PHYS, SUCC, is_safe, compute_viability_kernel
 
-ADVISORIES = g.ADVISORIES
 _seed = _initial_state()                 # single source of truth: acas_model_params.yaml
 SEED = (_seed[:5], _seed[5])             # ((x_mag, y_mag, x_sign, y_sign, h), a_prev)
-
-ALL_PHYS = list(itertools.product(
-    range(g.MAX_DIST_VAR + 1), range(g.MAX_DIST_VAR + 1),
-    (-1, 1), (-1, 1), range(g.MAX_HEADING_VAR)))
-
-SUCC = {s: {a: g.simulate_step(*s, a) for a in ADVISORIES} for s in ALL_PHYS}
-
-
-def is_safe(s) -> bool:
-    return g.compute_distance(s[0], s[1]) >= g.SAFETY_THRESHOLD
 
 
 def _to_pair(flat_state):
@@ -63,40 +51,8 @@ def reachable_pairs(blocked=frozenset()):
     return {_to_pair(flat) for flat in compute_reachable_states(blocked=blocked_flat)}
 
 
-def viability_kernel():
-    """Greatest fixpoint of V = {s safe : exists a with step(s,a) in V}."""
-    kernel = {s for s in ALL_PHYS if is_safe(s)}
-    while True:
-        doomed = {s for s in kernel
-                  if not any(SUCC[s][a] in kernel for a in ADVISORIES)}
-        if not doomed:
-            return kernel
-        kernel -= doomed
-
-
-def main() -> None:
-    R = reachable_pairs()
-    unsafe = [(s, p) for (s, p) in R if not is_safe(s)]
-    print(f"[CHECK] |R| = {len(R)} (expect 9428); unsafe pairs = {unsafe}")
-
-    V = viability_kernel()
-    allowed = {s: [a for a in ADVISORIES if SUCC[s][a] in V] for s in V}
-    boundary = {s for s, v in allowed.items() if len(v) < 5}
-    r_phys = {s for (s, _p) in R}
-    hist = Counter(len(v) for v in allowed.values())
-    print(f"[CHECK] |V| = {len(V)}; |boundary| = {len(boundary)} "
-          f"({100 * len(boundary) / len(V):.2f}% of V)")
-    print(f"[CHECK] |Allowed_V| histogram: {dict(sorted(hist.items()))}")
-    print(f"[CHECK] boundary ∩ R_phys = {sorted(boundary & r_phys)}")
-
-    # inductive candidate I0 and its single NN-dependent obligation
-    I0 = {(s, p) for (s, p) in R if s in V}
-    need_nn = sorted((s, p) for (s, p) in I0
-                     if any(SUCC[s][a] not in V for a in ADVISORIES))
-    print(f"[CHECK] |I0| = {len(I0)}; seed in I0: {SEED in I0}; "
-          f"pairs needing NN info: {need_nn}")
-
-    # corridor: walk unique predecessors back from the unsafe pair
+def _walk_corridor(R, unsafe):
+    """Walk unique predecessors back from the unsafe pair to the seed."""
     assert len(unsafe) == 1
     corridor = [unsafe[0]]
     while True:
@@ -109,6 +65,31 @@ def main() -> None:
         if corridor[-1][0] == SEED[0]:
             break
     corridor.reverse()
+    return corridor
+
+
+def main() -> None:
+    R = reachable_pairs()
+    unsafe = [(s, p) for (s, p) in R if not is_safe(s)]
+    print(f"[CHECK] |R| = {len(R)} (expect 9428); unsafe pairs = {unsafe}")
+
+    kernel = compute_viability_kernel()
+    V = kernel.V
+    r_phys = {s for (s, _p) in R}
+    hist = Counter(len(v) for v in kernel.allowed.values())
+    print(f"[CHECK] |V| = {len(V)}; |boundary| = {len(kernel.boundary)} "
+          f"({100 * len(kernel.boundary) / len(V):.2f}% of V)")
+    print(f"[CHECK] |Allowed_V| histogram: {dict(sorted(hist.items()))}")
+    print(f"[CHECK] boundary ∩ R_phys = {sorted(kernel.boundary & r_phys)}")
+
+    # inductive candidate I0 and its single NN-dependent obligation
+    I0 = {(s, p) for (s, p) in R if s in V}
+    need_nn = sorted((s, p) for (s, p) in I0
+                     if any(SUCC[s][a] not in V for a in ADVISORIES))
+    print(f"[CHECK] |I0| = {len(I0)}; seed in I0: {SEED in I0}; "
+          f"pairs needing NN info: {need_nn}")
+
+    corridor = _walk_corridor(R, unsafe)
     print(f"[CHECK] corridor (seed -> crash): {corridor}")
 
     # candidate injections
