@@ -235,18 +235,19 @@ def _add_command_free_var(smv: str) -> str:
 
 def _build_invar_lines(contracts: list[dict], smv_vars: dict[str, str]) -> list[str]:
     """
-    Emit one INVAR per dangerous (state, advisory) pair in each SAT contract.
+    Emit one INVAR per covered state in each SAT contract.
 
-    Uses smv_vars to look up SMV variable names so they don't need to be
-    hardcoded in this function.
+    guarantee_type (default not_equals):
+      not_equals — command_final != forbidden_advisory
+      equals     — command_final = required_advisory  (lasso determinism pins)
     """
     lines = []
     for c in contracts:
-        h   = c["heading_own_var"]
-        xm  = c["x_sign"]
-        ym  = c["y_sign"]
-        ap  = c["a_prev"]
-        fbd = c["forbidden_advisory"]
+        h = c["heading_own_var"]
+        xm = c["x_sign"]
+        ym = c["y_sign"]
+        ap = c["a_prev"]
+        guarantee_type = c.get("guarantee_type", "not_equals")
 
         for x_mag, y_mag in c["dangerous_xy"]:
             cond = (
@@ -257,9 +258,16 @@ def _build_invar_lines(contracts: list[dict], smv_vars: dict[str, str]) -> list[
                 f"system.{smv_vars['x_mag']} = {x_mag} & "
                 f"system.{smv_vars['y_mag']} = {y_mag}"
             )
-            lines.append(
-                f"INVAR ({cond}) -> system.{smv_vars['command_final']} != {fbd};"
-            )
+            if guarantee_type == "equals":
+                required = c["required_advisory"]
+                lines.append(
+                    f"INVAR ({cond}) -> system.{smv_vars['command_final']} = {required};"
+                )
+            else:
+                forbidden = c["forbidden_advisory"]
+                lines.append(
+                    f"INVAR ({cond}) -> system.{smv_vars['command_final']} != {forbidden};"
+                )
     return lines
 
 
