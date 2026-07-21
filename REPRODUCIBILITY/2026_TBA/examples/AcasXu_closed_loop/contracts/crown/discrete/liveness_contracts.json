@@ -38,9 +38,7 @@
       ],
       "required_advisory": "clear",
       "required_advisory_idx": 0,
-      "description": "Lasso pin 1: NN[clear] at (7,6,sx=1,sy=1,h=10) must select clear",
-      "onnx_margin": 0.0098649263381958,
-      "status": null
+      "description": "Lasso pin 1: NN[clear] at (7,6,sx=1,sy=1,h=10) must select clear"
     },
     {
       "id": 2,
@@ -76,9 +74,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 2: NN[clear] at (5,3,sx=1,sy=1,h=10) must select weak_right",
-      "onnx_margin": 0.0035347938537597656,
-      "status": null
+      "description": "Lasso pin 2: NN[clear] at (5,3,sx=1,sy=1,h=10) must select weak_right"
     },
     {
       "id": 3,
@@ -114,9 +110,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 3: NN[weak_right] at (3,0,sx=1,sy=1,h=9) must select weak_right",
-      "onnx_margin": 0.0032315850257873535,
-      "status": null
+      "description": "Lasso pin 3: NN[weak_right] at (3,0,sx=1,sy=1,h=9) must select weak_right"
     },
     {
       "id": 4,
@@ -152,9 +146,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 4: NN[weak_right] at (1,2,sx=1,sy=-1,h=8) must select weak_right",
-      "onnx_margin": 0.015671193599700928,
-      "status": null
+      "description": "Lasso pin 4: NN[weak_right] at (1,2,sx=1,sy=-1,h=8) must select weak_right"
     },
     {
       "id": 5,
@@ -190,9 +182,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 5: NN[weak_right] at (0,4,sx=-1,sy=-1,h=7) must select weak_right",
-      "onnx_margin": 0.02144026756286621,
-      "status": null
+      "description": "Lasso pin 5: NN[weak_right] at (0,4,sx=-1,sy=-1,h=7) must select weak_right"
     },
     {
       "id": 6,
@@ -228,9 +218,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 6: NN[weak_right] at (1,6,sx=-1,sy=-1,h=6) must select weak_right",
-      "onnx_margin": 0.020944595336914062,
-      "status": null
+      "description": "Lasso pin 6: NN[weak_right] at (1,6,sx=-1,sy=-1,h=6) must select weak_right"
     },
     {
       "id": 7,
@@ -266,9 +254,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 7: NN[weak_right] at (3,8,sx=-1,sy=-1,h=5) must select weak_right",
-      "onnx_margin": 0.020395994186401367,
-      "status": null
+      "description": "Lasso pin 7: NN[weak_right] at (3,8,sx=-1,sy=-1,h=5) must select weak_right"
     },
     {
       "id": 8,
@@ -304,9 +290,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 8: NN[weak_right] at (5,9,sx=-1,sy=-1,h=4) must select weak_right",
-      "onnx_margin": 0.019962072372436523,
-      "status": null
+      "description": "Lasso pin 8: NN[weak_right] at (5,9,sx=-1,sy=-1,h=4) must select weak_right"
     },
     {
       "id": 9,
@@ -342,9 +326,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 9: NN[weak_right] at (7,10,sx=-1,sy=-1,h=3) must select weak_right",
-      "onnx_margin": 0.021577894687652588,
-      "status": null
+      "description": "Lasso pin 9: NN[weak_right] at (7,10,sx=-1,sy=-1,h=3) must select weak_right"
     },
     {
       "id": 10,
@@ -380,9 +362,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 10: NN[weak_right] at (9,10,sx=-1,sy=-1,h=2) must select weak_right",
-      "onnx_margin": 0.018348664045333862,
-      "status": null
+      "description": "Lasso pin 10: NN[weak_right] at (9,10,sx=-1,sy=-1,h=2) must select weak_right"
     },
     {
       "id": 11,
@@ -418,9 +398,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 11: NN[weak_right] at (10,10,sx=-1,sy=-1,h=1) must select weak_right",
-      "onnx_margin": 0.01224660873413086,
-      "status": null
+      "description": "Lasso pin 11: NN[weak_right] at (10,10,sx=-1,sy=-1,h=1) must select weak_right"
     },
     {
       "id": 12,
@@ -456,9 +434,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 12: NN[weak_right] at (10,10,sx=-1,sy=-1,h=0) must select weak_right",
-      "onnx_margin": 0.009124785661697388,
-      "status": null
+      "description": "Lasso pin 12: NN[weak_right] at (10,10,sx=-1,sy=-1,h=0) must select weak_right"
     },
     {
       "id": 13,
@@ -494,9 +470,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 13: NN[weak_right] at (10,10,sx=-1,sy=-1,h=39) must select weak_right",
-      "onnx_margin": 0.007934600114822388,
-      "status": null
+      "description": "Lasso pin 13: NN[weak_right] at (10,10,sx=-1,sy=-1,h=39) must select weak_right"
     },
     {
       "id": 14,
@@ -532,9 +506,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 14: NN[weak_right] at (10,10,sx=-1,sy=-1,h=38) must select weak_right",
-      "onnx_margin": 0.0063315629959106445,
-      "status": null
+      "description": "Lasso pin 14: NN[weak_right] at (10,10,sx=-1,sy=-1,h=38) must select weak_right"
     },
     {
       "id": 15,
@@ -570,9 +542,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 15: NN[weak_right] at (10,10,sx=-1,sy=-1,h=37) must select weak_right",
-      "onnx_margin": 0.0046002864837646484,
-      "status": null
+      "description": "Lasso pin 15: NN[weak_right] at (10,10,sx=-1,sy=-1,h=37) must select weak_right"
     },
     {
       "id": 16,
@@ -608,9 +578,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 16: NN[weak_right] at (10,10,sx=-1,sy=-1,h=36) must select weak_right",
-      "onnx_margin": 0.0037679076194763184,
-      "status": null
+      "description": "Lasso pin 16: NN[weak_right] at (10,10,sx=-1,sy=-1,h=36) must select weak_right"
     },
     {
       "id": 17,
@@ -646,9 +614,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 17: NN[weak_right] at (10,10,sx=-1,sy=-1,h=35) must select weak_right",
-      "onnx_margin": 0.004283159971237183,
-      "status": null
+      "description": "Lasso pin 17: NN[weak_right] at (10,10,sx=-1,sy=-1,h=35) must select weak_right"
     },
     {
       "id": 18,
@@ -684,9 +650,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 18: NN[weak_right] at (10,10,sx=-1,sy=-1,h=34) must select weak_right",
-      "onnx_margin": 0.0018447339534759521,
-      "status": null
+      "description": "Lasso pin 18: NN[weak_right] at (10,10,sx=-1,sy=-1,h=34) must select weak_right"
     },
     {
       "id": 19,
@@ -722,9 +686,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 19: NN[weak_right] at (10,10,sx=-1,sy=-1,h=33) must select weak_right",
-      "onnx_margin": 0.003408372402191162,
-      "status": null
+      "description": "Lasso pin 19: NN[weak_right] at (10,10,sx=-1,sy=-1,h=33) must select weak_right"
     },
     {
       "id": 20,
@@ -760,9 +722,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 20: NN[weak_right] at (10,10,sx=-1,sy=-1,h=32) must select weak_right",
-      "onnx_margin": 0.005911141633987427,
-      "status": null
+      "description": "Lasso pin 20: NN[weak_right] at (10,10,sx=-1,sy=-1,h=32) must select weak_right"
     },
     {
       "id": 21,
@@ -798,9 +758,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 21: NN[weak_right] at (10,10,sx=-1,sy=-1,h=31) must select weak_right",
-      "onnx_margin": 0.008293330669403076,
-      "status": null
+      "description": "Lasso pin 21: NN[weak_right] at (10,10,sx=-1,sy=-1,h=31) must select weak_right"
     },
     {
       "id": 22,
@@ -836,9 +794,7 @@
       ],
       "required_advisory": "clear",
       "required_advisory_idx": 0,
-      "description": "Lasso pin 22: NN[weak_right] at (10,10,sx=-1,sy=-1,h=30) must select clear",
-      "onnx_margin": 0.010937482118606567,
-      "status": null
+      "description": "Lasso pin 22: NN[weak_right] at (10,10,sx=-1,sy=-1,h=30) must select clear"
     },
     {
       "id": 23,
@@ -874,9 +830,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 23: NN[clear] at (10,10,sx=-1,sy=-1,h=30) must select weak_right",
-      "onnx_margin": 0.0005160272121429443,
-      "status": null
+      "description": "Lasso pin 23: NN[clear] at (10,10,sx=-1,sy=-1,h=30) must select weak_right"
     },
     {
       "id": 24,
@@ -912,9 +866,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 24: NN[weak_right] at (10,10,sx=-1,sy=-1,h=29) must select weak_right",
-      "onnx_margin": 0.0018336772918701172,
-      "status": null
+      "description": "Lasso pin 24: NN[weak_right] at (10,10,sx=-1,sy=-1,h=29) must select weak_right"
     },
     {
       "id": 25,
@@ -950,9 +902,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 25: NN[weak_right] at (10,10,sx=-1,sy=-1,h=28) must select weak_right",
-      "onnx_margin": 0.009715080261230469,
-      "status": null
+      "description": "Lasso pin 25: NN[weak_right] at (10,10,sx=-1,sy=-1,h=28) must select weak_right"
     },
     {
       "id": 26,
@@ -988,9 +938,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 26: NN[weak_right] at (10,10,sx=-1,sy=-1,h=27) must select weak_right",
-      "onnx_margin": 0.010032713413238525,
-      "status": null
+      "description": "Lasso pin 26: NN[weak_right] at (10,10,sx=-1,sy=-1,h=27) must select weak_right"
     },
     {
       "id": 27,
@@ -1026,9 +974,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 27: NN[weak_right] at (10,10,sx=-1,sy=-1,h=26) must select weak_right",
-      "onnx_margin": 0.011419355869293213,
-      "status": null
+      "description": "Lasso pin 27: NN[weak_right] at (10,10,sx=-1,sy=-1,h=26) must select weak_right"
     },
     {
       "id": 28,
@@ -1064,9 +1010,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 28: NN[weak_right] at (10,10,sx=-1,sy=-1,h=25) must select weak_right",
-      "onnx_margin": 0.011099100112915039,
-      "status": null
+      "description": "Lasso pin 28: NN[weak_right] at (10,10,sx=-1,sy=-1,h=25) must select weak_right"
     },
     {
       "id": 29,
@@ -1102,9 +1046,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 29: NN[weak_right] at (10,10,sx=-1,sy=-1,h=24) must select weak_right",
-      "onnx_margin": 0.013157904148101807,
-      "status": null
+      "description": "Lasso pin 29: NN[weak_right] at (10,10,sx=-1,sy=-1,h=24) must select weak_right"
     },
     {
       "id": 30,
@@ -1140,9 +1082,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 30: NN[weak_right] at (10,10,sx=-1,sy=-1,h=23) must select weak_right",
-      "onnx_margin": 0.010616719722747803,
-      "status": null
+      "description": "Lasso pin 30: NN[weak_right] at (10,10,sx=-1,sy=-1,h=23) must select weak_right"
     },
     {
       "id": 31,
@@ -1178,9 +1118,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 31: NN[weak_right] at (10,10,sx=-1,sy=-1,h=22) must select weak_right",
-      "onnx_margin": 0.009056925773620605,
-      "status": null
+      "description": "Lasso pin 31: NN[weak_right] at (10,10,sx=-1,sy=-1,h=22) must select weak_right"
     },
     {
       "id": 32,
@@ -1216,9 +1154,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 32: NN[weak_right] at (10,10,sx=-1,sy=-1,h=21) must select weak_right",
-      "onnx_margin": 0.009319543838500977,
-      "status": null
+      "description": "Lasso pin 32: NN[weak_right] at (10,10,sx=-1,sy=-1,h=21) must select weak_right"
     },
     {
       "id": 33,
@@ -1254,9 +1190,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 33: NN[weak_right] at (10,10,sx=-1,sy=-1,h=20) must select weak_right",
-      "onnx_margin": 0.0099717378616333,
-      "status": null
+      "description": "Lasso pin 33: NN[weak_right] at (10,10,sx=-1,sy=-1,h=20) must select weak_right"
     },
     {
       "id": 34,
@@ -1292,9 +1226,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 34: NN[weak_right] at (10,10,sx=-1,sy=-1,h=19) must select weak_right",
-      "onnx_margin": 0.012281239032745361,
-      "status": null
+      "description": "Lasso pin 34: NN[weak_right] at (10,10,sx=-1,sy=-1,h=19) must select weak_right"
     },
     {
       "id": 35,
@@ -1330,9 +1262,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 35: NN[weak_right] at (10,10,sx=-1,sy=-1,h=18) must select weak_right",
-      "onnx_margin": 0.014637410640716553,
-      "status": null
+      "description": "Lasso pin 35: NN[weak_right] at (10,10,sx=-1,sy=-1,h=18) must select weak_right"
     },
     {
       "id": 36,
@@ -1368,9 +1298,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 36: NN[weak_right] at (10,10,sx=-1,sy=-1,h=17) must select weak_right",
-      "onnx_margin": 0.023379266262054443,
-      "status": null
+      "description": "Lasso pin 36: NN[weak_right] at (10,10,sx=-1,sy=-1,h=17) must select weak_right"
     },
     {
       "id": 37,
@@ -1406,9 +1334,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 37: NN[weak_right] at (10,10,sx=-1,sy=-1,h=16) must select weak_right",
-      "onnx_margin": 0.020001351833343506,
-      "status": null
+      "description": "Lasso pin 37: NN[weak_right] at (10,10,sx=-1,sy=-1,h=16) must select weak_right"
     },
     {
       "id": 38,
@@ -1444,9 +1370,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 38: NN[weak_right] at (10,10,sx=-1,sy=-1,h=15) must select weak_right",
-      "onnx_margin": 0.012944817543029785,
-      "status": null
+      "description": "Lasso pin 38: NN[weak_right] at (10,10,sx=-1,sy=-1,h=15) must select weak_right"
     },
     {
       "id": 39,
@@ -1482,9 +1406,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 39: NN[weak_right] at (10,10,sx=-1,sy=-1,h=14) must select weak_right",
-      "onnx_margin": 0.014787077903747559,
-      "status": null
+      "description": "Lasso pin 39: NN[weak_right] at (10,10,sx=-1,sy=-1,h=14) must select weak_right"
     },
     {
       "id": 40,
@@ -1520,9 +1442,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 40: NN[weak_right] at (10,10,sx=-1,sy=-1,h=13) must select weak_right",
-      "onnx_margin": 0.01656162738800049,
-      "status": null
+      "description": "Lasso pin 40: NN[weak_right] at (10,10,sx=-1,sy=-1,h=13) must select weak_right"
     },
     {
       "id": 41,
@@ -1558,9 +1478,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 41: NN[weak_right] at (10,10,sx=-1,sy=-1,h=12) must select weak_right",
-      "onnx_margin": 0.01973426342010498,
-      "status": null
+      "description": "Lasso pin 41: NN[weak_right] at (10,10,sx=-1,sy=-1,h=12) must select weak_right"
     },
     {
       "id": 42,
@@ -1596,9 +1514,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 42: NN[weak_right] at (10,10,sx=-1,sy=-1,h=11) must select weak_right",
-      "onnx_margin": 0.007537662982940674,
-      "status": null
+      "description": "Lasso pin 42: NN[weak_right] at (10,10,sx=-1,sy=-1,h=11) must select weak_right"
     },
     {
       "id": 43,
@@ -1634,9 +1550,7 @@
       ],
       "required_advisory": "strong_left",
       "required_advisory_idx": 3,
-      "description": "Lasso pin 43: NN[weak_right] at (10,10,sx=-1,sy=-1,h=10) must select strong_left",
-      "onnx_margin": 0.0006728172302246094,
-      "status": null
+      "description": "Lasso pin 43: NN[weak_right] at (10,10,sx=-1,sy=-1,h=10) must select strong_left"
     },
     {
       "id": 44,
@@ -1672,9 +1586,7 @@
       ],
       "required_advisory": "weak_left",
       "required_advisory_idx": 1,
-      "description": "Lasso pin 44: NN[strong_left] at (10,10,sx=-1,sy=-1,h=12) must select weak_left",
-      "onnx_margin": 0.017418742179870605,
-      "status": null
+      "description": "Lasso pin 44: NN[strong_left] at (10,10,sx=-1,sy=-1,h=12) must select weak_left"
     },
     {
       "id": 45,
@@ -1710,9 +1622,7 @@
       ],
       "required_advisory": "clear",
       "required_advisory_idx": 0,
-      "description": "Lasso pin 45: NN[weak_left] at (10,10,sx=-1,sy=-1,h=13) must select clear",
-      "onnx_margin": 0.009147047996520996,
-      "status": null
+      "description": "Lasso pin 45: NN[weak_left] at (10,10,sx=-1,sy=-1,h=13) must select clear"
     },
     {
       "id": 46,
@@ -1748,9 +1658,7 @@
       ],
       "required_advisory": "strong_left",
       "required_advisory_idx": 3,
-      "description": "Lasso pin 46: NN[clear] at (10,10,sx=-1,sy=-1,h=13) must select strong_left",
-      "onnx_margin": 0.007372438907623291,
-      "status": null
+      "description": "Lasso pin 46: NN[clear] at (10,10,sx=-1,sy=-1,h=13) must select strong_left"
     },
     {
       "id": 47,
@@ -1786,9 +1694,7 @@
       ],
       "required_advisory": "strong_right",
       "required_advisory_idx": 4,
-      "description": "Lasso pin 47: NN[strong_left] at (10,10,sx=-1,sy=-1,h=15) must select strong_right",
-      "onnx_margin": 0.006400465965270996,
-      "status": null
+      "description": "Lasso pin 47: NN[strong_left] at (10,10,sx=-1,sy=-1,h=15) must select strong_right"
     },
     {
       "id": 48,
@@ -1824,9 +1730,7 @@
       ],
       "required_advisory": "strong_right",
       "required_advisory_idx": 4,
-      "description": "Lasso pin 48: NN[strong_right] at (10,10,sx=-1,sy=-1,h=13) must select strong_right",
-      "onnx_margin": 0.006287992000579834,
-      "status": null
+      "description": "Lasso pin 48: NN[strong_right] at (10,10,sx=-1,sy=-1,h=13) must select strong_right"
     },
     {
       "id": 49,
@@ -1862,9 +1766,7 @@
       ],
       "required_advisory": "weak_left",
       "required_advisory_idx": 1,
-      "description": "Lasso pin 49: NN[strong_right] at (10,10,sx=-1,sy=-1,h=11) must select weak_left",
-      "onnx_margin": 0.023853421211242676,
-      "status": null
+      "description": "Lasso pin 49: NN[strong_right] at (10,10,sx=-1,sy=-1,h=11) must select weak_left"
     },
     {
       "id": 50,
@@ -1900,9 +1802,7 @@
       ],
       "required_advisory": "clear",
       "required_advisory_idx": 0,
-      "description": "Lasso pin 50: NN[weak_left] at (10,10,sx=-1,sy=-1,h=12) must select clear",
-      "onnx_margin": 0.010022282600402832,
-      "status": null
+      "description": "Lasso pin 50: NN[weak_left] at (10,10,sx=-1,sy=-1,h=12) must select clear"
     },
     {
       "id": 51,
@@ -1938,9 +1838,7 @@
       ],
       "required_advisory": "strong_left",
       "required_advisory_idx": 3,
-      "description": "Lasso pin 51: NN[clear] at (10,10,sx=-1,sy=-1,h=12) must select strong_left",
-      "onnx_margin": 0.02358335256576538,
-      "status": null
+      "description": "Lasso pin 51: NN[clear] at (10,10,sx=-1,sy=-1,h=12) must select strong_left"
     },
     {
       "id": 52,
@@ -1976,9 +1874,7 @@
       ],
       "required_advisory": "weak_right",
       "required_advisory_idx": 2,
-      "description": "Lasso pin 52: NN[strong_left] at (10,10,sx=-1,sy=-1,h=14) must select weak_right",
-      "onnx_margin": 0.013734817504882812,
-      "status": null
+      "description": "Lasso pin 52: NN[strong_left] at (10,10,sx=-1,sy=-1,h=14) must select weak_right"
     }
   ]
 }

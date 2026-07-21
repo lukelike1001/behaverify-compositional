@@ -1,0 +1,10 @@
+{
+  "description": "CROWN verification results for safety_corridor_contracts.json. Only Q2 (id 2) was run: the termination theorem guarantees at least one of Q1/Q2 holds, and Q2 verified SAT at the initial bound (operative contract). Q1 (id 1) was not run through CROWN — expected UNSAT is empirical ONNX forward pass only.",
+  "contracts": [
+    {
+      "id": 2,
+      "status": "SAT",
+      "note": "acas_contract_verifier.py --point --advisory clear --forbidden strong_right --x_mag 7 --y_mag 6 --x_sign 1 --y_sign 1 --heading 10; verified with initial CROWN bound, no PGD/branching needed"
+    }
+  ]
+}
