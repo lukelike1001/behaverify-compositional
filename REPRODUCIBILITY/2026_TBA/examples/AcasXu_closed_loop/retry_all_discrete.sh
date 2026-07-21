@@ -12,13 +12,13 @@ declare -A NN_MAP=(
     [5]="aprev_strong_left"
 )
 
-BASE_CFG="verify_acas_contracts_config.yaml"
-OUT_DIR="contracts/crown/discrete_goals"
+BASE_CFG="acas_verifier_params.yaml"
+OUT_DIR="contracts/crown/discrete"
 
 for IDX in 1 2 3 4 5; do
     NAME="${NN_MAP[$IDX]}"
     OUTPUT="${OUT_DIR}/${NAME}_crown_results.json"
-    TMP_CFG="verify_acas_contracts_config_nn${IDX}.yaml"
+    TMP_CFG="acas_verifier_params_nn${IDX}.yaml"
 
     echo "========================================"
     echo "Retry NN ${IDX}: ${NAME}"

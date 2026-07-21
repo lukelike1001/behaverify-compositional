@@ -111,12 +111,12 @@ def main() -> None:
     parser.add_argument(
         "--specs",
         type=Path,
-        default=_HERE / "contracts/crown/lasso_pin_specs.json",
+        default=_HERE / "contracts/crown/discrete/liveness_contracts.json",
     )
     parser.add_argument(
         "--results",
         type=Path,
-        default=_HERE / "contracts/crown/lasso_pin_crown_results.json",
+        default=_HERE / "contracts/crown/discrete/liveness_contract_results.json",
     )
     parser.add_argument(
         "--output",

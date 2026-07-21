@@ -13,7 +13,7 @@ Stages:
   5. [REPORT]   Write JSON report with per-step timing and verdicts
                 Delegates to pipeline/pipeline_report_writer.py (PipelineReportWriter)
 
-SMV variable names are read from verify_acas_contracts_config.yaml (smv_variables section)
+SMV variable names are read from acas_verifier_params.yaml (smv_variables section)
 rather than hardcoded in this script.
 
 SMV file locations:
@@ -22,8 +22,8 @@ SMV file locations:
 
 Usage (from AcasXu_closed_loop/):
   python run_acas_compositional_pipeline.py \\
-      --contracts contracts/crown/continuous_goals/enabled_pgd/aprev_clear_crown_results.json \\
-      --output    results/compositional/continuous_goals/enabled_pgd/aprev_clear \\
+      --contracts contracts/crown/continuous/enabled_pgd/aprev_clear_crown_results.json \\
+      --output    results/compositional/continuous/enabled_pgd/aprev_clear \\
       [--nuxmv    ../../nuXmv_DL/bin/nuXmv] \\
       [--nuxmv-cmd ../../commands/nuxmv_commands/command_invar] \\
       [--skip-tree]   # reuse existing tree/acas_360.tree
@@ -62,7 +62,7 @@ DEFAULT_NUXMV     = _HERE / "../../nuXmv_DL/bin/nuXmv"
 DEFAULT_NUXMV_CMD = _HERE / "../../commands/nuxmv_commands/command_invar"
 DEFAULT_METAMODEL = _HERE / "../../metamodel/behaverify.tx"
 DEFAULT_SRC       = _HERE / "../../src"
-DEFAULT_CONFIG    = _HERE / "verify_acas_contracts_config.yaml"
+DEFAULT_CONFIG    = _HERE / "acas_verifier_params.yaml"
 
 ADVISORIES = ['clear', 'weak_left', 'weak_right', 'strong_left', 'strong_right']
 
@@ -72,7 +72,7 @@ ADVISORIES = ['clear', 'weak_left', 'weak_right', 'strong_left', 'strong_right']
 # ---------------------------------------------------------------------------
 
 def _load_smv_vars(config_path: Path = DEFAULT_CONFIG) -> dict[str, str]:
-    """Load SMV variable names from verify_acas_contracts_config.yaml."""
+    """Load SMV variable names from acas_verifier_params.yaml."""
     with open(config_path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     smv = cfg.get("smv_variables", {})
@@ -321,9 +321,9 @@ def main() -> None:
         description="End-to-end compositional verification pipeline for ACAS Xu 5-NN NSBT."
     )
     p.add_argument("--contracts",  required=True,
-                   help="Path to verified contracts JSON (e.g. contracts/crown/continuous_goals/enabled_pgd/aprev_clear_crown_results.json)")
-    p.add_argument("--spec",       default="contracts/crown/continuous_goals/contract_specs_eps1e4.json",
-                   help="Path to original contract spec JSON (default: contracts/crown/continuous_goals/contract_specs_eps1e4.json)")
+                   help="Path to verified contracts JSON (e.g. contracts/crown/continuous/enabled_pgd/aprev_clear_crown_results.json)")
+    p.add_argument("--spec",       default="contracts/crown/safety_full_contracts.json",
+                   help="Path to original contract spec JSON (default: contracts/crown/safety_full_contracts.json)")
     p.add_argument("--output",     required=True,
                    help="Output directory for patched SMV, nuXmv output, and report")
     p.add_argument("--nuxmv",      default=str(DEFAULT_NUXMV),

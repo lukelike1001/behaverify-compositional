@@ -10,8 +10,8 @@
 # Stages:
 #   1. [DISCOVERY]      acas_inductive_analysis.py -- viability kernel, corridor,
 #                        candidate-injection checks
-#   2. [CROWN]           verify_single_state.py -- formal certificate for the seed
-#                        contract (Q2); re-verifies contracts/crown/corridor_crown_results.json
+#   2. [CROWN]           acas_contract_verifier.py --point -- formal certificate for the seed
+#                        contract (Q2); re-verifies corridor operative state
 #   3. [PATCH+VERIFY]    run_acas_compositional_pipeline.py -- inject the 1 INVAR line,
 #                        run nuXmv
 #
@@ -20,7 +20,7 @@
 #   ./run_acas_corridor_pipeline.sh --nuxmv /path/to/nuXmv
 #
 # Output:
-#   results/compositional/discrete_goals/corridor/pipeline_report.json
+#   results/compositional/discrete/corridor/pipeline_report.json
 #
 # Prerequisites:
 #   pip install -e .   (alpha-beta-CROWN, see root README.md)
@@ -50,7 +50,8 @@ echo ""
 echo "========================================"
 echo "[2/3] CROWN CERTIFICATE (Q2, the operative contract)"
 echo "========================================"
-"${PYTHON}" verify_single_state.py \
+"${PYTHON}" acas_contract_verifier.py \
+    --point \
     --advisory clear --forbidden strong_right \
     --x_mag 7 --y_mag 6 --x_sign 1 --y_sign 1 --heading 10
 
@@ -59,11 +60,11 @@ echo "========================================"
 echo "[3/3] SMV PATCH + NUXMV"
 echo "========================================"
 "${PYTHON}" run_acas_compositional_pipeline.py \
-    --contracts contracts/crown/corridor_crown_results.json \
-    --spec      contracts/crown/corridor_contracts.json \
-    --output    results/compositional/discrete_goals/corridor \
+    --contracts contracts/crown/discrete/safety_corridor_contract_results.json \
+    --spec      contracts/crown/discrete/safety_corridor_contracts.json \
+    --output    results/compositional/discrete/corridor \
     --nuxmv     "${NUXMV}" \
     --skip-tree --skip-smv
 
 echo ""
-echo "Done. Report: results/compositional/discrete_goals/corridor/pipeline_report.json"
+echo "Done. Report: results/compositional/discrete/corridor/pipeline_report.json"

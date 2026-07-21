@@ -11,7 +11,7 @@ via lazy imports inside worker_fn (required for multiprocessing spawn context).
 Usage:
     python verify_acas_contracts_parallel.py \\
         --timeout 3600 \\
-        --retry-from contracts/crown/continuous_goals/enabled_pgd/aprev_clear_crown_results.json \\
+        --retry-from contracts/crown/continuous/enabled_pgd/aprev_clear_crown_results.json \\
         --workers 8 \\
         --device cpu
 """
@@ -47,8 +47,9 @@ def worker_fn(args_tuple):
     from pipeline.neuro.crown.crown_verifier import CrownVerifier
 
     if discrete:
-        from generate_acas_contracts import compute_nn_inputs
+        from acas_domain import AcasDomain
 
+        domain = AcasDomain.from_yaml()
         crown_verifier = CrownVerifier.from_timeout_and_attack_settings(
             timeout_seconds=discrete_timeout,
             pgd_order="before",
@@ -63,7 +64,9 @@ def worker_fn(args_tuple):
 
         t0 = time.perf_counter()
         for x_mag, y_mag in contract_spec["dangerous_xy"]:
-            exact = compute_nn_inputs(x_mag, y_mag, x_sign, y_sign, heading_var)
+            exact = domain.compute_nn_inputs(
+                x_mag, y_mag, x_sign, y_sign, heading_var,
+            )
             try:
                 per_status, _ = crown_verifier.certify_network_never_selects_class(
                     onnx_path=onnx_path,
@@ -130,7 +133,7 @@ def worker_fn(args_tuple):
 
 def main():
     parser = argparse.ArgumentParser(description="Parallel ACAS Xu contract verification")
-    parser.add_argument("--config", default="verify_acas_contracts_config.yaml")
+    parser.add_argument("--config", default="acas_verifier_params.yaml")
     parser.add_argument("--retry-from", dest="retry_from", required=True,
                         help="Previous results JSON — re-verify TIMEOUT contracts")
     parser.add_argument("--timeout", type=int, default=3600,

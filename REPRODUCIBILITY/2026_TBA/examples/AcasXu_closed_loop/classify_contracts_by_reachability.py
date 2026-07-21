@@ -3,15 +3,15 @@ classify_contracts_by_reachability.py
 
 Classify every discrete-mode contract (SAT and UNSAT) by whether it covers a
 reachable dangerous state. For UNSAT contracts, "unreachable_explained" means
-the UNSAT verdict is not a safety-relevant finding (see verify_single_state.py
-for resolving the exceptions). For SAT contracts, the same check gives the
+the UNSAT verdict is not a safety-relevant finding (see acas_contract_verifier.py
+--point for resolving exceptions). For SAT contracts, the same check gives the
 projected INVAR line count Optimization 1's pruning would inject -- only SAT
 contracts are ever turned into INVAR constraints (see run_smv_patch() in
 run_acas_compositional_pipeline.py), so this is the number that matters for
 sizing that work before writing it.
 
-Input:  contracts/crown/discrete_goals/aprev_*_crown_results.json (5 files)
-Output: results/compositional/discrete_goals/contract_reachability_report.json
+Input:  contracts/crown/discrete/archive/aprev_*_crown_results.json (5 files)
+Output: results/compositional/discrete/contract_reachability_report.json
 """
 
 from __future__ import annotations
@@ -19,18 +19,22 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from generate_acas_contracts import _P
-from acas_reachability import compute_reachable_states, reachable_dangerous_xy
+from acas_domain import AcasDomain
+from acas_reachability import AcasReachableSet
 
 _HERE          = Path(__file__).parent
-CONTRACTS_DIR  = _HERE / "contracts/crown/discrete_goals"
-REPORT_PATH    = _HERE / "results/compositional/discrete_goals/contract_reachability_report.json"
+CONTRACTS_DIR  = _HERE / "contracts/crown/discrete/archive"
+REPORT_PATH    = _HERE / "results/compositional/discrete/contract_reachability_report.json"
 
-_IDX_TO_ADVISORY = {net["idx"]: name for name, net in _P["networks"].items()}
+_DOMAIN = AcasDomain.from_yaml()
+_IDX_TO_ADVISORY = {
+    network_idx: name
+    for name, (network_idx, _onnx) in _DOMAIN.a_prev_to_nn.items()
+}
 
 
 def main() -> None:
-    reachable = compute_reachable_states()
+    reachable_set = AcasReachableSet.compute(_DOMAIN)
 
     per_network = {}
     reachable_dangerous_state_contracts = []
@@ -43,7 +47,10 @@ def main() -> None:
         per_network[advisory] = {}
         for status in ("SAT", "UNSAT"):
             contracts = [c for c in data["contracts"] if c["status"] == status]
-            reachable_states_by_id = {c["id"]: reachable_dangerous_xy(c, advisory, reachable) for c in contracts}
+            reachable_states_by_id = {
+                contract["id"]: reachable_set.dangerous_xy(contract, advisory)
+                for contract in contracts
+            }
 
             reachable_dangerous_state_contracts += [
                 {"network": advisory, "contract_id": cid, "status": status}

@@ -18,7 +18,14 @@ from typing import Any
 
 import numpy as np
 
-import generate_acas_contracts as g
+from acas_domain import AcasDomain
+from acas_lasso_trajectory import (  # noqa: E402
+    DEFAULT_LASSO_JSON,
+    STEM_LENGTH,
+    AcasLassoTrajectory,
+    DOMAIN,
+)
+from acas_state import AcasAugmentedState
 
 _HERE = Path(__file__).parent.resolve()
 _TBA = (_HERE / "../../").resolve()
@@ -30,91 +37,8 @@ from pipeline.neuro.crown.crown_verifier import CrownVerifier  # noqa: E402
 # Point pins (eps=0): discrete closed loop only evaluates lattice points; SMV
 # INVARs guard exact state values. Box eps>0 is optional local-robustness.
 DEFAULT_EPS = 0.0
-DEFAULT_LASSO_JSON = _HERE / "acas_lasso_trajectory.json"
-STEM_LENGTH = 39  # from 07-12 inductive analysis; checked on load
 # Tree/SMV: acas.active := (distance < max_dist); max_dist = 1000 in template.
 ACTIVE_DISTANCE_THRESHOLD = 1000
-
-
-@dataclass(frozen=True)
-class AcasAugmentedState:
-    """Physical state + a_prev (which network is active)."""
-
-    x_mag: int
-    y_mag: int
-    x_sign: int
-    y_sign: int
-    heading_own_var: int
-    a_prev: str
-
-    @classmethod
-    def from_json_pair(cls, pair: list) -> AcasAugmentedState:
-        state, a_prev = pair
-        return cls(
-            x_mag=int(state[0]),
-            y_mag=int(state[1]),
-            x_sign=int(state[2]),
-            y_sign=int(state[3]),
-            heading_own_var=int(state[4]),
-            a_prev=str(a_prev),
-        )
-
-    def physical_tuple(self) -> tuple[int, int, int, int, int]:
-        return (
-            self.x_mag, self.y_mag, self.x_sign, self.y_sign, self.heading_own_var,
-        )
-
-    def pair_key(self) -> tuple:
-        return (*self.physical_tuple(), self.a_prev)
-
-    def nn_input_vector(self) -> list[float]:
-        return g.compute_nn_inputs(
-            self.x_mag, self.y_mag, self.x_sign, self.y_sign, self.heading_own_var,
-        )
-
-    def distance(self) -> int:
-        return g.compute_distance(self.x_mag, self.y_mag)
-
-
-@dataclass
-class AcasLassoTrajectory:
-    """Ordered lasso: stem then cycle; pins use next required advisory."""
-
-    states: list[AcasAugmentedState]
-    cycle_start_index: int
-
-    @classmethod
-    def from_json_file(
-        cls,
-        path: Path = DEFAULT_LASSO_JSON,
-        cycle_start_index: int = STEM_LENGTH,
-    ) -> AcasLassoTrajectory:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        states = [AcasAugmentedState.from_json_pair(pair) for pair in raw]
-        if len(states) != 52:
-            raise ValueError(f"expected 52 lasso states, got {len(states)}")
-        if not (0 <= cycle_start_index < len(states)):
-            raise ValueError(f"bad cycle_start_index={cycle_start_index}")
-        return cls(states=states, cycle_start_index=cycle_start_index)
-
-    @property
-    def cycle_states(self) -> list[AcasAugmentedState]:
-        return self.states[self.cycle_start_index:]
-
-    def max_distance_on_cycle(self) -> int:
-        return max(s.distance() for s in self.cycle_states)
-
-    def required_advisory_after(self, index: int) -> str:
-        """Advisory chosen at states[index] (becomes next a_prev)."""
-        if index < len(self.states) - 1:
-            return self.states[index + 1].a_prev
-        # Last stem/cycle state transitions into cycle_start.
-        return self.states[self.cycle_start_index].a_prev
-
-    def successor_physical(
-        self, state: AcasAugmentedState, advisory: str,
-    ) -> tuple[int, int, int, int, int]:
-        return g.simulate_step(*state.physical_tuple(), advisory)
 
 
 @dataclass
@@ -130,18 +54,24 @@ class AcasLassoPin:
 
     @property
     def required_advisory_idx(self) -> int:
-        return g.ADV_IDX[self.required_advisory]
+        return DOMAIN.adv_idx[self.required_advisory]
 
     @property
     def network_idx(self) -> int:
-        return g.A_PREV_TO_NN[self.state.a_prev][0]
+        return DOMAIN.a_prev_to_nn[self.state.a_prev][0]
 
     @property
     def onnx_relative_path(self) -> str:
-        return g.A_PREV_TO_NN[self.state.a_prev][1]
+        return DOMAIN.a_prev_to_nn[self.state.a_prev][1]
 
     def nn_input_bounds(self) -> tuple[list[float], list[float]]:
-        center = self.state.nn_input_vector()
+        center = DOMAIN.compute_nn_inputs(
+            self.state.x_mag,
+            self.state.y_mag,
+            self.state.x_sign,
+            self.state.y_sign,
+            self.state.heading_own_var,
+        )
         lower = [value - self.eps for value in center]
         upper = [value + self.eps for value in center]
         return lower, upper
@@ -217,9 +147,16 @@ class AcasLassoPinSet:
                 sessions[a_prev] = ort.InferenceSession(str(onnx_path))
 
             session = sessions[a_prev]
-            inputs = np.array(pin.state.nn_input_vector(), dtype=np.float32).reshape(
-                1, 1, 1, -1,
-            )
+            inputs = np.array(
+                DOMAIN.compute_nn_inputs(
+                    pin.state.x_mag,
+                    pin.state.y_mag,
+                    pin.state.x_sign,
+                    pin.state.y_sign,
+                    pin.state.heading_own_var,
+                ),
+                dtype=np.float32,
+            ).reshape(1, 1, 1, -1)
             input_name = session.get_inputs()[0].name
             scores = session.run(None, {input_name: inputs})[0][0]
             required_idx = pin.required_advisory_idx
@@ -228,7 +165,7 @@ class AcasLassoPinSet:
                 float(scores[j]) for j in range(len(scores)) if j != required_idx
             )
             pin.onnx_margin = required_score - other_best
-            argmax_name = g.ADVISORIES[int(np.argmax(scores))]
+            argmax_name = DOMAIN.advisories[int(np.argmax(scores))]
             if argmax_name != pin.required_advisory:
                 raise RuntimeError(
                     f"pin {pin.pin_id}: ONNX argmax={argmax_name} "
@@ -258,7 +195,7 @@ class AcasLassoPinSet:
                 input_lower_bounds=lower,
                 input_upper_bounds=upper,
                 required_class_index=pin.required_advisory_idx,
-                number_of_classes=len(g.ADVISORIES),
+                number_of_classes=len(DOMAIN.advisories),
             )
             wall = time.perf_counter() - start
             pin.crown_status = status
@@ -290,16 +227,18 @@ class AcasLassoPinSet:
         while frontier:
             x_mag, y_mag, x_sign, y_sign, heading, a_prev = frontier.pop()
             key = (x_mag, y_mag, x_sign, y_sign, heading, a_prev)
-            distance = g.compute_distance(x_mag, y_mag)
+            distance = DOMAIN.compute_distance(x_mag, y_mag)
             if model_active_freeze and distance >= ACTIVE_DISTANCE_THRESHOLD:
                 # SMV: tree inactive → no NN tick, no environment update.
                 continue
             if key in pin_map:
                 advisories = [pin_map[key]]
             else:
-                advisories = list(g.ADVISORIES)
+                advisories = list(DOMAIN.advisories)
             for advisory in advisories:
-                nxt = g.simulate_step(x_mag, y_mag, x_sign, y_sign, heading, advisory)
+                nxt = DOMAIN.simulate_step(
+                    x_mag, y_mag, x_sign, y_sign, heading, advisory,
+                )
                 nxt_key = (*nxt, advisory)
                 if nxt_key not in seen:
                     seen.add(nxt_key)
@@ -315,7 +254,7 @@ class AcasLassoPinSet:
         """
         first_inactive = None
         for index, state in enumerate(self.trajectory.states):
-            if state.distance() >= ACTIVE_DISTANCE_THRESHOLD:
+            if DOMAIN.compute_distance(state.x_mag, state.y_mag) >= ACTIVE_DISTANCE_THRESHOLD:
                 first_inactive = (index, state)
                 break
         lines = [
@@ -329,7 +268,8 @@ class AcasLassoPinSet:
             index, state = first_inactive
             lines.append(
                 f"  First ONNX-lasso inactive index={index}: "
-                f"rho={state.distance()} at xy=({state.x_mag},{state.y_mag}) "
+                f"rho={DOMAIN.compute_distance(state.x_mag, state.y_mag)} "
+                f"at xy=({state.x_mag},{state.y_mag}) "
                 f"h={state.heading_own_var} a_prev={state.a_prev}"
             )
             lines.append(
@@ -391,12 +331,12 @@ def main() -> None:
     parser.add_argument(
         "--specs-out",
         type=Path,
-        default=_HERE / "contracts/crown/lasso_pin_specs.json",
+        default=_HERE / "contracts/crown/discrete/liveness_contracts.json",
     )
     parser.add_argument(
         "--results-out",
         type=Path,
-        default=_HERE / "contracts/crown/lasso_pin_crown_results.json",
+        default=_HERE / "contracts/crown/discrete/liveness_contract_results.json",
     )
     parser.add_argument(
         "--run-crown", action="store_true",

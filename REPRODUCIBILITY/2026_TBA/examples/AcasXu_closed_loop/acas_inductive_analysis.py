@@ -4,7 +4,7 @@ acas_inductive_analysis.py
 Inductive-invariant stress test for the simplified ACAS Xu closed loop.
 Companion to 2026_07_12_inductive_invariant_stress_test.md.
 
-Computes, using ONLY the physics in generate_acas_contracts.py (no networks):
+Computes, using ONLY AcasDomain physics (no networks):
 
   1. R      -- reachable augmented states (state, a_prev) under nondeterministic
                advisories, seeded from the closed loop's initial condition.
@@ -26,10 +26,10 @@ Every printed [CHECK] line is an assertion of a claim in the companion report.
 
 from collections import Counter
 
-from acas_reachability import _initial_state, compute_reachable_states
-from acas_viability import ADVISORIES, ALL_PHYS, SUCC, is_safe, compute_viability_kernel
+from acas_reachability import AcasReachableSet
+from acas_viability import AcasViabilityKernel
 
-_seed = _initial_state()                 # single source of truth: acas_model_params.yaml
+_seed = AcasReachableSet.seed_state()     # single source of truth: acas_model_params.yaml
 SEED = (_seed[:5], _seed[5])             # ((x_mag, y_mag, x_sign, y_sign, h), a_prev)
 
 
@@ -44,20 +44,26 @@ def _to_flat(pair):
 
 
 def reachable_pairs(blocked=frozenset()):
-    """(physical_state, a_prev) pairs reachable from the seed. Thin wrapper around
-    acas_reachability.compute_reachable_states(), converting between its flat 6-tuple
-    representation and this file's nested-pair representation."""
-    blocked_flat = frozenset((_to_flat(pair), a) for pair, a in blocked)
-    return {_to_pair(flat) for flat in compute_reachable_states(blocked=blocked_flat)}
+    """(physical_state, a_prev) pairs reachable from the seed via AcasReachableSet."""
+    from acas_state import AcasAugmentedState
+    blocked_edges = frozenset(
+        (AcasAugmentedState.from_tuple(_to_flat(pair)), advisory)
+        for pair, advisory in blocked
+    )
+    reachable_set = AcasReachableSet.compute(blocked=blocked_edges)
+    return {_to_pair(state) for state in reachable_set.states}
 
 
-def _walk_corridor(R, unsafe):
+def _walk_corridor(reachable_pairs_set, unsafe, successors):
     """Walk unique predecessors back from the unsafe pair to the seed."""
     assert len(unsafe) == 1
     corridor = [unsafe[0]]
     while True:
         (s2, p2) = corridor[-1]
-        preds = [(s, p) for (s, p) in R if SUCC[s][p2] == s2 and (s, p) != (s2, p2)]
+        preds = [
+            (s, p) for (s, p) in reachable_pairs_set
+            if successors[s][p2] == s2 and (s, p) != (s2, p2)
+        ]
         print(f"[CHECK] predecessors of {corridor[-1]}: {preds}")
         if len(preds) != 1:
             break
@@ -69,11 +75,14 @@ def _walk_corridor(R, unsafe):
 
 
 def main() -> None:
+    kernel = AcasViabilityKernel.compute()
+    successors = kernel.successors
+    advisories = list(kernel.domain.advisories)
+
     R = reachable_pairs()
-    unsafe = [(s, p) for (s, p) in R if not is_safe(s)]
+    unsafe = [(s, p) for (s, p) in R if not kernel.is_plant_safe(s)]
     print(f"[CHECK] |R| = {len(R)} (expect 9428); unsafe pairs = {unsafe}")
 
-    kernel = compute_viability_kernel()
     V = kernel.V
     r_phys = {s for (s, _p) in R}
     hist = Counter(len(v) for v in kernel.allowed.values())
@@ -84,12 +93,14 @@ def main() -> None:
 
     # inductive candidate I0 and its single NN-dependent obligation
     I0 = {(s, p) for (s, p) in R if s in V}
-    need_nn = sorted((s, p) for (s, p) in I0
-                     if any(SUCC[s][a] not in V for a in ADVISORIES))
+    need_nn = sorted(
+        (s, p) for (s, p) in I0
+        if any(successors[s][a] not in V for a in advisories)
+    )
     print(f"[CHECK] |I0| = {len(I0)}; seed in I0: {SEED in I0}; "
           f"pairs needing NN info: {need_nn}")
 
-    corridor = _walk_corridor(R, unsafe)
+    corridor = _walk_corridor(R, unsafe, successors)
     print(f"[CHECK] corridor (seed -> crash): {corridor}")
 
     # candidate injections
@@ -99,7 +110,7 @@ def main() -> None:
         ("Q2 at seed", {(SEED, 'strong_right')}),
     ):
         RR = reachable_pairs(blocked=frozenset(blocked))
-        verdict = all(is_safe(s) for (s, _p) in RR)
+        verdict = all(kernel.is_plant_safe(s) for (s, _p) in RR)
         print(f"[CHECK] inject {label}: |R| = {len(RR)}, "
               f"INVARSPEC {'TRUE' if verdict else 'FALSE'}")
 

@@ -3,70 +3,132 @@ acas_reachability.py
 
 BFS over the augmented (state, a_prev) space, without querying any network.
 Each tick's advisory is treated as nondeterministic (any of the 5), which can
-only enlarge the reachable set relative to the real system -- so the result
-is a sound over-approximation, safe to use for both classifying and pruning
-contracts.
+only enlarge the reachable set relative to the real system -- sound over-approx
+for classifying and pruning contracts.
 
-Augmented state: (x_mag, y_mag, x_sign, y_sign, heading_own_var, a_prev).
+Uses AcasDomain + AcasAugmentedState. Orthogonal to acas_viability.py.
 """
 
 from __future__ import annotations
 
-from generate_acas_contracts import ADVISORIES, _P, simulate_step
+from dataclasses import dataclass
+from typing import Any
 
-AugmentedState = tuple[int, int, int, int, int, str]
+from acas_domain import AcasDomain
+from acas_state import AcasAugmentedState, AcasState
+
+# Edge key for abstract BFS: (augmented state, next advisory). Same type whether
+# the edge is allowed or blocked -- distinction is set membership only.
+BlockedTransition = tuple[AcasAugmentedState, str]
 
 
-def _initial_state() -> AugmentedState:
-    s = _P["initial_state"]
-    return (s["x_mag"], s["y_mag"], s["x_sign"], s["y_sign"], s["heading_own_var"], s["a_prev"])
-
-
-def compute_reachable_states(blocked: frozenset[tuple[AugmentedState, str]] = frozenset()) -> set[AugmentedState]:
+@dataclass(frozen=True)
+class AcasReachableSet:
     """
-    Reachable augmented states from the fixed initial condition.
+    Over-approximate reachable set of augmented states from the closed-loop seed.
 
-    `blocked` forbids specific (from_state, next_advisory) transitions -- used to model
-    an injected A/G contract when checking whether it closes off a spurious counterexample.
+    Construct with ``AcasReachableSet.compute(domain, blocked=...)``.
     """
-    start = _initial_state()
-    reachable = {start}
-    frontier = [start]
 
-    while frontier:
-        next_frontier = []
-        for state in frontier:
-            x_mag, y_mag, x_sign, y_sign, heading_own_var, _a_prev = state
-            for advisory in ADVISORIES:
-                if (state, advisory) in blocked:
-                    continue
-                next_state = (*simulate_step(x_mag, y_mag, x_sign, y_sign, heading_own_var, advisory), advisory)
-                if next_state not in reachable:
-                    reachable.add(next_state)
-                    next_frontier.append(next_state)
-        frontier = next_frontier
+    domain: AcasDomain
+    states: frozenset[AcasAugmentedState]
+    seed: AcasAugmentedState
+    blocked: frozenset[BlockedTransition]
 
-    return reachable
+    @staticmethod
+    def seed_state(domain: AcasDomain | None = None) -> AcasAugmentedState:
+        """Closed-loop seed from acas_model_params.yaml (via AcasDomain)."""
+        plant = domain if domain is not None else AcasDomain.from_yaml()
+        physical, a_prev = plant.seed_physical_and_aprev()
+        return AcasAugmentedState.from_physical(physical, a_prev)
 
+    @classmethod
+    def compute(
+        cls,
+        domain: AcasDomain | None = None,
+        blocked: frozenset[BlockedTransition] | None = None,
+    ) -> AcasReachableSet:
+        """
+        BFS from the seed. ``blocked`` forbids (from_state, next_advisory)
+        transitions (e.g. an injected A/G contract when stress-testing a corridor).
+        """
+        plant = domain if domain is not None else AcasDomain.from_yaml()
+        blocked_set: frozenset[BlockedTransition] = (
+            blocked if blocked is not None else frozenset()
+        )
+        start = cls.seed_state(plant)
+        reachable: set[AcasAugmentedState] = {start}
+        frontier = [start]
+        advisories = list(plant.advisories)
 
-def reachable_dangerous_xy(contract: dict, advisory: str, reachable: set[AugmentedState]) -> list[tuple[int, int]]:
-    """Contract's dangerous (x_mag, y_mag) states that are actually reachable under this advisory."""
-    x_sign, y_sign, heading = contract["x_sign"], contract["y_sign"], contract["heading_own_var"]
-    return [
-        (x_mag, y_mag) for x_mag, y_mag in contract["dangerous_xy"]
-        if (x_mag, y_mag, x_sign, y_sign, heading, advisory) in reachable
-    ]
+        while frontier:
+            next_frontier: list[AcasAugmentedState] = []
+            for state in frontier:
+                for advisory in advisories:
+                    if (state, advisory) in blocked_set:
+                        continue
+                    next_physical = plant.simulate_step(
+                        state.x_mag,
+                        state.y_mag,
+                        state.x_sign,
+                        state.y_sign,
+                        state.heading_own_var,
+                        advisory,
+                    )
+                    next_state = AcasAugmentedState.from_physical(
+                        next_physical, advisory,
+                    )
+                    if next_state not in reachable:
+                        reachable.add(next_state)
+                        next_frontier.append(next_state)
+            frontier = next_frontier
 
+        return cls(
+            domain=plant,
+            states=frozenset(reachable),
+            seed=start,
+            blocked=blocked_set,
+        )
 
-def reachable_physical_by_aprev(reachable: set[AugmentedState]) -> dict[str, frozenset[tuple[int, int, int, int, int]]]:
-    """Regroup a reachable augmented-state set by a_prev, dropping the a_prev field
-    itself -- gives, for each network, the physical states reachable while it's active."""
-    by_aprev: dict[str, set] = {a: set() for a in ADVISORIES}
-    for *phys, a_prev in reachable:
-        by_aprev[a_prev].add(tuple(phys))
-    return {a: frozenset(states) for a, states in by_aprev.items()}
+    def __len__(self) -> int:
+        return len(self.states)
+
+    def __contains__(self, state: AcasAugmentedState) -> bool:
+        return state in self.states
+
+    def dangerous_xy(
+        self,
+        contract: dict[str, Any],
+        advisory: str,
+    ) -> list[tuple[int, int]]:
+        """
+        (x_mag, y_mag) pairs in the contract that appear in this reachable set
+        under a_prev=advisory.
+        """
+        x_sign = contract["x_sign"]
+        y_sign = contract["y_sign"]
+        heading = contract["heading_own_var"]
+        return [
+            (x_mag, y_mag)
+            for x_mag, y_mag in contract["dangerous_xy"]
+            if AcasAugmentedState(
+                x_mag, y_mag, x_sign, y_sign, heading, advisory,
+            ) in self.states
+        ]
+
+    def physical_by_aprev(self) -> dict[str, frozenset[AcasState]]:
+        """Map a_prev -> plant states that appear with that a_prev."""
+        by_aprev: dict[str, set[AcasState]] = {
+            name: set() for name in self.domain.advisories
+        }
+        for state in self.states:
+            by_aprev[state.a_prev].add(state.physical())
+        return {
+            name: frozenset(physical_states)
+            for name, physical_states in by_aprev.items()
+        }
 
 
 if __name__ == "__main__":
-    reachable = compute_reachable_states()
-    print(f"{len(reachable)} reachable states out of 96,800 possible")
+    reachable_set = AcasReachableSet.compute()
+    print(f"{len(reachable_set)} reachable states out of 96,800 possible")

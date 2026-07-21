@@ -27,7 +27,7 @@
 #   results/monolithic/nuxmv_output.txt       (skipped with --skip-monolithic)
 #   results/monolithic/timing.txt             (skipped with --skip-monolithic)
 #   results/monolithic/pipeline_report.json
-#   results/compositional/discrete_goals/all_nns/pipeline_report.json  (same as before — output path, not contracts)
+#   results/compositional/discrete/all_nns/pipeline_report.json  (same as before — output path, not contracts)
 #
 # Prerequisites:
 #   pip install -e .
@@ -228,7 +228,7 @@ echo "========================================"
 echo "[4/6] MERGING DISCRETE CONTRACT RESULTS"
 echo "========================================"
 
-DISCRETE_DIR="${_HERE}/contracts/crown/discrete_goals"
+DISCRETE_DIR="${_HERE}/contracts/crown/discrete/archive"
 MERGED_JSON="${DISCRETE_DIR}/.merged.json"
 
 "${PYTHON}" - <<PYEOF
@@ -272,7 +272,7 @@ echo "========================================"
 echo "[5/6] DISCRETE COMPOSITIONAL PIPELINE"
 echo "========================================"
 
-COMP_OUT_DIR="${_HERE}/results/compositional/discrete_goals/all_nns"
+COMP_OUT_DIR="${_HERE}/results/compositional/discrete/all_nns"
 
 cd "${_HERE}"
 "${PYTHON}" run_acas_compositional_pipeline.py \
@@ -357,4 +357,4 @@ print("  is the ground truth (nuXmv evaluates only reachable states).")
 PYEOF
 
 echo ""
-echo "Done. All results in results/monolithic/ and results/compositional/discrete_goals/all_nns/"
+echo "Done. All results in results/monolithic/ and results/compositional/discrete/all_nns/"
