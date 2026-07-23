@@ -11,20 +11,20 @@
 #   ./run_all_continuous_pipelines.sh contracts/crown/discrete/
 #
 # Outputs go to:
-#   results/compositional/<relative-path-under-crown>/<nn_stem>/pipeline_report.json
+#   results/<relative-path-under-crown>/<nn_stem>/pipeline_report.json
 #
-# The output path mirrors the contracts/crown/ structure under results/compositional/:
-#   contracts/crown/continuous/enabled_pgd/ -> results/compositional/continuous/enabled_pgd/
-#   contracts/crown/discrete/              -> results/compositional/discrete/
+# The output path mirrors the contracts/crown/ structure under results/:
+#   contracts/crown/continuous/enabled_pgd/ -> results/continuous/enabled_pgd/
+#   contracts/crown/discrete/safety/        -> results/discrete/safety/
 
 set -euo pipefail
 
 CONTRACTS_DIR="${1:-contracts/crown/continuous/enabled_pgd}"
 
-# Strip leading "contracts/crown/" to get the relative subfolder, then mirror under results/compositional/
+# Strip leading "contracts/crown/" to get the relative subfolder, then mirror under results/
 RELATIVE="${CONTRACTS_DIR#contracts/crown/}"
 RELATIVE="${RELATIVE%/}"  # strip trailing slash if present
-OUTPUT_BASE="results/compositional/${RELATIVE}"
+OUTPUT_BASE="results/${RELATIVE}"
 
 echo "Contracts folder : ${CONTRACTS_DIR}"
 echo "Output base      : ${OUTPUT_BASE}/"

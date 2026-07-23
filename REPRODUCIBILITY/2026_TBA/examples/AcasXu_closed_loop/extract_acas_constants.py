@@ -79,8 +79,8 @@ def main() -> None:
         help="Path to the .tree template (default: acas_template_360.tree)",
     )
     parser.add_argument(
-        "--params", type=Path, default=here / "acas_model_params.yaml",
-        help="Path to the params YAML to update (default: acas_model_params.yaml)",
+        "--params", type=Path, default=here / "core" / "acas_model_params.yaml",
+        help="Path to the params YAML to update (default: core/acas_model_params.yaml)",
     )
     args = parser.parse_args()
 

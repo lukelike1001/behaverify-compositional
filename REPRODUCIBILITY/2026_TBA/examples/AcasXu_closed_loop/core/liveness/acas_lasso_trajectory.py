@@ -24,12 +24,14 @@ from typing import Any
 
 import numpy as np
 
-from acas_domain import AcasDomain
-from acas_reachability import AcasReachableSet
-from acas_state import AcasAugmentedState
+from core.acas_domain import AcasDomain
+from core.acas_reachability import AcasReachableSet
+from core.acas_state import AcasAugmentedState
+from core.paths import EXAMPLE_ROOT
 
-_HERE = Path(__file__).resolve().parent
-DEFAULT_LASSO_JSON = _HERE / "acas_lasso_trajectory.json"
+DEFAULT_LASSO_JSON = (
+    EXAMPLE_ROOT / "core" / "liveness" / "acas_lasso_trajectory.json"
+)
 # Fixed artifact for current trained weights (07-12 inductive analysis).
 STEM_LENGTH = 39
 EXPECTED_TOTAL = 52  # stem 39 + cycle 13
@@ -57,14 +59,22 @@ class AcasLassoTrajectory:
     @classmethod
     def from_json_file(
         cls,
-        path: Path = DEFAULT_LASSO_JSON,
-        cycle_start_index: int = STEM_LENGTH,
+        path: Path,
+        cycle_start_index: int,
+        expected_total: int,
     ) -> AcasLassoTrajectory:
-        """Load precomputed dump. Does not import onnxruntime."""
+        """
+        Load precomputed dump. Does not import onnxruntime.
+
+        All arguments required — pass them from AcasLivenessContractConfig
+        (or explicit CLI values), not module-level defaults.
+        """
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
         states = [AcasAugmentedState.from_json_pair(pair) for pair in raw]
-        if len(states) != EXPECTED_TOTAL:
-            raise ValueError(f"expected {EXPECTED_TOTAL} lasso states, got {len(states)}")
+        if len(states) != expected_total:
+            raise ValueError(
+                f"expected {expected_total} lasso states, got {len(states)}"
+            )
         if not (0 <= cycle_start_index < len(states)):
             raise ValueError(f"bad cycle_start_index={cycle_start_index}")
         return cls(states=states, cycle_start_index=cycle_start_index)
@@ -107,7 +117,7 @@ class AcasLassoTrajectory:
     @staticmethod
     def _load_sessions(ort: Any) -> dict[str, Any]:
         return {
-            name: ort.InferenceSession(str(_HERE / onnx_rel))
+            name: ort.InferenceSession(str(EXAMPLE_ROOT / onnx_rel))
             for name, (_idx, onnx_rel) in DOMAIN.a_prev_to_nn.items()
         }
 
@@ -230,10 +240,21 @@ def main() -> None:
         "--from-json", type=Path, default=None,
         help="Skip ONNX; load dump and print checks only",
     )
+    parser.add_argument(
+        "--config", type=Path, default=None,
+        help="Liveness YAML for dump shape when using --from-json "
+             "(default: acas_liveness_params.yaml)",
+    )
     args = parser.parse_args()
 
     if args.from_json is not None:
-        traj = AcasLassoTrajectory.from_json_file(args.from_json)
+        from core.liveness.acas_liveness_contract_config import AcasLivenessContractConfig
+        config = AcasLivenessContractConfig.from_yaml(args.config)
+        traj = AcasLassoTrajectory.from_json_file(
+            args.from_json,
+            cycle_start_index=config.expected_stem_length,
+            expected_total=config.expected_total_states,
+        )
     else:
         traj = AcasLassoTrajectory.from_onnx()
 

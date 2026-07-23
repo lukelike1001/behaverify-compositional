@@ -1,15 +1,15 @@
 # acas_verifier_params.yaml
 # Configuration for A/G contract verification of the ACAS Xu closed-loop NSBT.
-# See acas_contract_verifier.py for the contract schema and class index mapping.
+# See acas_safety_contract_verifier.py for the contract schema and class index mapping.
 #
-# Contracts are pre-computed by acas_contract_generator.py and stored as a JSON
+# Contracts are pre-computed by acas_safety_contract_generator.py and stored as a JSON
 # file containing range-based input bounds (nn_input_lower / nn_input_upper).
 # This script just loads them and calls CROWN for each contract.
 #
 # Also read by run_acas_compositional_pipeline.py for the smv_variables section.
 
-# Pre-computed contract specs (output of acas_contract_generator.py).
-contracts_path: "contracts/crown/safety_full_contracts.json"
+# Pre-computed contract specs (output of acas_safety_contract_generator.py).
+contracts_path: "contracts/crown/discrete/safety/safety_full_contracts.json"
 
 # Which NN to verify.  network_idx corresponds to the a_prev selector in the tree:
 #   1 = a_prev=clear        (aprev_clear.onnx)

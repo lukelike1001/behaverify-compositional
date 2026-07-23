@@ -23,7 +23,7 @@ SMV file locations:
 Usage (from AcasXu_closed_loop/):
   python run_acas_compositional_pipeline.py \\
       --contracts contracts/crown/continuous/enabled_pgd/aprev_clear_crown_results.json \\
-      --output    results/compositional/continuous/enabled_pgd/aprev_clear \\
+      --output    results/continuous/enabled_pgd/aprev_clear \\
       [--nuxmv    ../../nuXmv_DL/bin/nuXmv] \\
       [--nuxmv-cmd ../../commands/nuxmv_commands/command_invar] \\
       [--skip-tree]   # reuse existing tree/acas_360.tree
@@ -33,25 +33,27 @@ Usage (from AcasXu_closed_loop/):
 from __future__ import annotations
 
 import argparse
-import json
 import os
-import re
 import sys
 import time
 import tracemalloc
 from pathlib import Path
 
-import yaml
-
-_HERE = Path(__file__).parent.resolve()
+_SCRIPTS = Path(__file__).resolve().parent
+_EXAMPLE = _SCRIPTS.parent
+_HERE = _EXAMPLE  # AcasXu_closed_loop root (compat alias)
 _TBA  = (_HERE / "../../").resolve()
 
 if str(_TBA) not in sys.path:
     sys.path.insert(0, str(_TBA))
+if str(_EXAMPLE) not in sys.path:
+    sys.path.insert(0, str(_EXAMPLE))
 
 from pipeline.symbolic.nuxmv.nuxmv_verifier import NuxmvVerifier
 from pipeline.pipeline_report_writer import PipelineReportWriter
 from pipeline.process_memory import ProcessMemory
+
+from core.acas_smv_contract_patcher import AcasSmvContractPatcher
 
 try:
     import resource as _resource
@@ -62,30 +64,12 @@ DEFAULT_NUXMV     = _HERE / "../../nuXmv_DL/bin/nuXmv"
 DEFAULT_NUXMV_CMD = _HERE / "../../commands/nuxmv_commands/command_invar"
 DEFAULT_METAMODEL = _HERE / "../../metamodel/behaverify.tx"
 DEFAULT_SRC       = _HERE / "../../src"
-DEFAULT_CONFIG    = _HERE / "acas_verifier_params.yaml"
-
-ADVISORIES = ['clear', 'weak_left', 'weak_right', 'strong_left', 'strong_right']
+DEFAULT_CONFIG    = _HERE / "core" / "acas_verifier_params.yaml"
 
 
 # ---------------------------------------------------------------------------
 # SMV variable names (read from config)
 # ---------------------------------------------------------------------------
-
-def _load_smv_vars(config_path: Path = DEFAULT_CONFIG) -> dict[str, str]:
-    """Load SMV variable names from acas_verifier_params.yaml."""
-    with open(config_path, encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
-    smv = cfg.get("smv_variables", {})
-    return {
-        "command_prev":  smv.get("command_prev",  "command_stage_0"),
-        "command_final": smv.get("command_final", "command_stage_5"),
-        "x_mag":         smv.get("x_mag",         "x_mag_stage_0"),
-        "y_mag":         smv.get("y_mag",         "y_mag_stage_0"),
-        "x_sign":        smv.get("x_sign",        "x_sign_stage_0"),
-        "y_sign":        smv.get("y_sign",        "y_sign_stage_0"),
-        "heading":       smv.get("heading",       "heading_own_var_stage_0"),
-    }
-
 
 # ---------------------------------------------------------------------------
 # Step 1 — Tree generation
@@ -168,148 +152,32 @@ def run_smv_generation(ctx: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Step 3 — SMV patching: replace NN tables with non-det VAR + INVAR contracts
+# Step 3 — SMV patching (AcasSmvContractPatcher)
 # ---------------------------------------------------------------------------
 
-def _load_sat_contracts(verified_path: Path, spec_path: Path) -> list[dict]:
-    with open(verified_path, encoding="utf-8") as f:
-        verified = json.load(f)
-    with open(spec_path, encoding="utf-8") as f:
-        spec = json.load(f)
-
-    spec_by_id = {c["id"]: c for c in spec["contracts"]}
-    sat = []
-    for c in verified["contracts"]:
-        if c["status"] != "SAT":
-            continue
-        merged = {**spec_by_id[c["id"]], **c}
-        sat.append(merged)
-
-    print(f"  {len(sat)} SAT contracts loaded (of {len(verified['contracts'])} total)")
-    return sat
-
-
-def _remove_nn_defines(smv: str) -> tuple[str, int]:
-    """Remove all 5 network_k_1_stage_0 DEFINE case blocks."""
-    total_removed = 0
-    for k in range(1, 6):
-        var = f"network_{k}_1_stage_0"
-        pattern = (
-            r" +" + re.escape(var) + r" :=\s+"
-            r"case\s+"
-            r".*?"
-            r"esac;\n"
-        )
-        before = smv.count("\n")
-        smv, n = re.subn(pattern, "", smv, flags=re.DOTALL)
-        if n == 0:
-            raise ValueError(f"DEFINE block for '{var}' not found in SMV.")
-        total_removed += before - smv.count("\n")
-    return smv, total_removed
-
-
-def _add_command_free_var(smv: str) -> str:
-    """
-    Replace the 5 TRUE-branch NN-table references with a single fresh free VAR.
-
-    Declares  nn_output_free : {advisory domain}  in the VAR section, then
-    replaces each TRUE branch with nn_output_free.  A single shared free
-    variable is sound — at most one NN runs per tick.
-    """
-    domain = "{" + ", ".join(ADVISORIES) + "}"
-    new_var = f"        nn_output_free : {domain};\n"
-    marker = "--START OF BLACKBOARD VARIABLES DECLARATION\n"
-    if marker not in smv:
-        raise ValueError("VAR-section marker '--START OF BLACKBOARD VARIABLES DECLARATION' not found.")
-    smv = smv.replace(marker, marker + new_var, 1)
-
-    for k in range(1, 6):
-        old = f"                TRUE : network_{k}_1_stage_0;"
-        new = f"                TRUE : nn_output_free;"
-        if old not in smv:
-            raise ValueError(f"Expected staging assignment for network_{k}_1_stage_0 not found.")
-        smv = smv.replace(old, new, 1)
-
-    return smv
-
-
-def _build_invar_lines(contracts: list[dict], smv_vars: dict[str, str]) -> list[str]:
-    """
-    Emit one INVAR per covered state in each SAT contract.
-
-    guarantee_type (default not_equals):
-      not_equals — command_final != forbidden_advisory
-      equals     — command_final = required_advisory  (lasso determinism pins)
-    """
-    lines = []
-    for c in contracts:
-        h = c["heading_own_var"]
-        xm = c["x_sign"]
-        ym = c["y_sign"]
-        ap = c["a_prev"]
-        guarantee_type = c.get("guarantee_type", "not_equals")
-
-        for x_mag, y_mag in c["dangerous_xy"]:
-            cond = (
-                f"system.{smv_vars['command_prev']} = {ap} & "
-                f"system.{smv_vars['heading']} = {h} & "
-                f"system.{smv_vars['x_sign']} = {xm} & "
-                f"system.{smv_vars['y_sign']} = {ym} & "
-                f"system.{smv_vars['x_mag']} = {x_mag} & "
-                f"system.{smv_vars['y_mag']} = {y_mag}"
-            )
-            if guarantee_type == "equals":
-                required = c["required_advisory"]
-                lines.append(
-                    f"INVAR ({cond}) -> system.{smv_vars['command_final']} = {required};"
-                )
-            else:
-                forbidden = c["forbidden_advisory"]
-                lines.append(
-                    f"INVAR ({cond}) -> system.{smv_vars['command_final']} != {forbidden};"
-                )
-    return lines
-
-
-def _inject_invars(smv: str, invar_lines: list[str]) -> str:
-    marker = "--------------SPECIFICATIONS\n"
-    if marker not in smv:
-        raise ValueError("SPECIFICATIONS marker not found in SMV.")
-    block = "-- A/G contract constraints (verified by alpha-beta-CROWN):\n"
-    block += "\n".join(invar_lines) + "\n"
-    return smv.replace(marker, marker + block, 1)
-
-
-def run_smv_patch(ctx: dict, smv_vars: dict[str, str]) -> dict:
+def run_smv_patch(ctx: dict, patcher: AcasSmvContractPatcher) -> dict:
     print("\n" + "=" * 60)
     print("[3/4] SMV PATCHING (contract injection)")
     print("=" * 60)
 
-    contracts = _load_sat_contracts(ctx["contracts_path"], ctx["spec_path"])
-
-    t0 = time.perf_counter()
-    smv = ctx["base_smv_path"].read_text(encoding="utf-8").replace("\r\n", "\n")
-
-    smv, lines_removed = _remove_nn_defines(smv)
-    print(f"  Removed 5 NN DEFINE blocks ({lines_removed} lines)")
-
-    smv = _add_command_free_var(smv)
+    # --contracts is CROWN results; --spec is original specs (IDs must align).
+    sat_contracts = AcasSmvContractPatcher.load_sat_contracts(
+        ctx["spec_path"],
+        ctx["contracts_path"],
+    )
+    metrics = patcher.patch_file(
+        ctx["base_smv_path"],
+        ctx["smv_path"],
+        sat_contracts,
+    )
+    print(f"  Removed 5 NN DEFINE blocks ({metrics['nn_lines_removed']} lines)")
     print("  Replaced NN table outputs with non-deterministic advisory domain")
-
-    invar_lines = _build_invar_lines(contracts, smv_vars)
-    smv = _inject_invars(smv, invar_lines)
-    print(f"  Injected {len(invar_lines)} INVAR constraints from {len(contracts)} SAT contracts")
-
-    ctx["smv_path"].write_text(smv, encoding="utf-8")
-    wall_sec = time.perf_counter() - t0
-
-    print(f"  Patched SMV: {ctx['smv_path']}  ({wall_sec:.1f}s)")
-    return {
-        "wall_sec":         round(wall_sec, 3),
-        "sat_contracts":    len(contracts),
-        "invar_lines":      len(invar_lines),
-        "nn_lines_removed": lines_removed,
-    }
+    print(
+        f"  Injected {metrics['invar_lines']} INVAR constraints from "
+        f"{metrics['sat_contracts']} SAT contracts"
+    )
+    print(f"  Patched SMV: {ctx['smv_path']}  ({metrics['wall_sec']:.1f}s)")
+    return metrics
 
 
 # ---------------------------------------------------------------------------
@@ -322,8 +190,8 @@ def main() -> None:
     )
     p.add_argument("--contracts",  required=True,
                    help="Path to verified contracts JSON (e.g. contracts/crown/continuous/enabled_pgd/aprev_clear_crown_results.json)")
-    p.add_argument("--spec",       default="contracts/crown/safety_full_contracts.json",
-                   help="Path to original contract spec JSON (default: contracts/crown/safety_full_contracts.json)")
+    p.add_argument("--spec",       default="contracts/crown/discrete/safety/safety_full_contracts.json",
+                   help="Path to original contract spec JSON (default: contracts/crown/discrete/safety/safety_full_contracts.json)")
     p.add_argument("--output",     required=True,
                    help="Output directory for patched SMV, nuXmv output, and report")
     p.add_argument("--nuxmv",      default=str(DEFAULT_NUXMV),
@@ -340,7 +208,7 @@ def main() -> None:
                    help="Skip base SMV generation; reuse symbolic/smv/acas_360.smv if it exists")
     args = p.parse_args()
 
-    smv_vars   = _load_smv_vars(Path(args.config))
+    patcher = AcasSmvContractPatcher.from_verifier_yaml(Path(args.config))
     output_dir = Path(args.output).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -367,7 +235,7 @@ def main() -> None:
 
     tree_metrics = run_tree_generation(ctx)
     smv_metrics = run_smv_generation(ctx)
-    patch_metrics = run_smv_patch(ctx, smv_vars)
+    patch_metrics = run_smv_patch(ctx, patcher)
     nuxmv_metrics = NuxmvVerifier.from_pipeline_context(ctx).run_and_collect_metrics()
 
     total = time.perf_counter() - t_start

@@ -18,8 +18,9 @@ from typing import Any
 
 import yaml
 
-_HERE = Path(__file__).resolve().parent
-DEFAULT_MODEL_PARAMS = _HERE / "acas_model_params.yaml"
+from core.paths import EXAMPLE_ROOT
+
+DEFAULT_MODEL_PARAMS = EXAMPLE_ROOT / "core" / "acas_model_params.yaml"
 
 
 @dataclass(frozen=True)

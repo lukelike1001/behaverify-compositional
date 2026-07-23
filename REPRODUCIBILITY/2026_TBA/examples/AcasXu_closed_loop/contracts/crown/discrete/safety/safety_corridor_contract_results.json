@@ -4,7 +4,7 @@
     {
       "id": 2,
       "status": "SAT",
-      "note": "acas_contract_verifier.py --point --advisory clear --forbidden strong_right --x_mag 7 --y_mag 6 --x_sign 1 --y_sign 1 --heading 10; verified with initial CROWN bound, no PGD/branching needed"
+      "note": "acas_safety_contract_verifier.py --point --advisory clear --forbidden strong_right --x_mag 7 --y_mag 6 --x_sign 1 --y_sign 1 --heading 10; verified with initial CROWN bound, no PGD/branching needed"
     }
   ]
 }

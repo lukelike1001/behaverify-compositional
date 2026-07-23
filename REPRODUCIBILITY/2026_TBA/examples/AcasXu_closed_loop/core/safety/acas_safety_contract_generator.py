@@ -1,51 +1,50 @@
 """
-acas_contract_generator.py
+acas_safety_contract_generator.py
 
-Range-based A/G safety contracts from plant physics (AcasDomain).
+Safety-side contract generation from plant physics (AcasDomain).
 
-Owns only:
-  - AcasContractGenerator.enumerate_dangerous_pairs
-  - AcasContractGenerator.group_range_contracts
-  - CLI main (write JSON)
+Produces list[AcasSafetyContract] (range boxes over dangerous cells).
+CLI writes contracts/crown/discrete/safety/safety_full_contracts.json via dump_json.
 
-No CROWN; no viability/reachability pruning.
+No CROWN; no liveness pins.
 
 Usage (from AcasXu_closed_loop/):
 
-    python3 acas_contract_generator.py
-    python3 acas_contract_generator.py --eps 1e-4 --output path/to/specs.json
-    python3 acas_contract_generator.py --dry-run
+    python3 acas_safety_contract_generator.py
+    python3 acas_safety_contract_generator.py --eps 1e-4 --output path/to/specs.json
+    python3 acas_safety_contract_generator.py --dry-run
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from acas_domain import AcasDomain
+from core.acas_contract import AcasSafetyContract
+from core.acas_domain import AcasDomain
 
 
 @dataclass
-class AcasContractGenerator:
+class AcasSafetyContractGenerator:
     """
-    Build range-contract JSON specs from AcasDomain physics.
+    Build range safety contracts from AcasDomain physics.
 
-    One contract per (heading, quadrant, forbidden_advisory, a_prev/network).
+    One AcasSafetyContract per (heading, quadrant, forbidden_advisory, a_prev).
     """
 
     domain: AcasDomain
 
     @classmethod
-    def from_yaml(cls, path: Path | str | None = None) -> AcasContractGenerator:
+    def from_yaml(cls, path: Path | str | None = None) -> AcasSafetyContractGenerator:
         return cls(domain=AcasDomain.from_yaml(path))
 
     def enumerate_dangerous_pairs(self) -> list[dict[str, Any]]:
         """
-        States with distance >= safety_threshold where some advisory makes
-        next distance < safety_threshold.
+        Internal intermediate only (not AcasSafetyContract).
+
+        States with rho >= threshold where some advisory makes next rho < threshold.
         """
         domain = self.domain
         advisory_index = domain.adv_idx
@@ -79,11 +78,11 @@ class AcasContractGenerator:
         self,
         pairs: list[dict[str, Any]],
         eps: float = 1e-4,
-    ) -> list[dict[str, Any]]:
+    ) -> list[AcasSafetyContract]:
         """
         Group pairs by (heading, x_sign, y_sign, forbidden_advisory).
 
-        One bounding box over NN inputs per group, then one contract per network.
+        One NN-input box per group, then one AcasSafetyContract per network.
         """
         domain = self.domain
         advisory_index = domain.adv_idx
@@ -100,15 +99,17 @@ class AcasContractGenerator:
             if group_key not in groups:
                 groups[group_key] = {"inputs": [], "states": []}
             groups[group_key]["inputs"].append(pair["nn_inputs"])
-            groups[group_key]["states"].append([state["x_mag"], state["y_mag"]])
+            groups[group_key]["states"].append(
+                (int(state["x_mag"]), int(state["y_mag"])),
+            )
 
-        contracts: list[dict[str, Any]] = []
+        contracts: list[AcasSafetyContract] = []
         contract_id = 1
 
         for group_key in sorted(groups):
             heading_own_var, x_sign, y_sign, forbidden_advisory = group_key
             input_list = groups[group_key]["inputs"]
-            dangerous_states = groups[group_key]["states"]
+            dangerous_states: list[tuple[int, int]] = groups[group_key]["states"]
             n = len(input_list[0])
 
             lower = [min(inputs[i] for inputs in input_list) - eps for i in range(n)]
@@ -118,29 +119,29 @@ class AcasContractGenerator:
                 return "+" if value == 1 else "-"
 
             for a_prev, (network_idx, onnx_path) in domain.a_prev_to_nn.items():
-                contracts.append({
-                    "id": contract_id,
-                    "type": "range",
-                    "heading_own_var": heading_own_var,
-                    "x_sign": x_sign,
-                    "y_sign": y_sign,
-                    "a_prev": a_prev,
-                    "network_idx": network_idx,
-                    "onnx": onnx_path,
-                    "nn_input_lower": lower,
-                    "nn_input_upper": upper,
-                    "n_states_covered": len(dangerous_states),
-                    "dangerous_xy": dangerous_states,
-                    "forbidden_advisory": forbidden_advisory,
-                    "forbidden_advisory_idx": advisory_index[forbidden_advisory],
-                    "description": (
+                contracts.append(AcasSafetyContract(
+                    contract_id=contract_id,
+                    a_prev=a_prev,
+                    network_idx=network_idx,
+                    onnx=onnx_path,
+                    heading_own_var=heading_own_var,
+                    x_sign=x_sign,
+                    y_sign=y_sign,
+                    nn_input_lower=lower,
+                    nn_input_upper=upper,
+                    description=(
                         f"NN_{network_idx} (a_prev={a_prev}) "
                         f"h={heading_own_var} "
                         f"({sign_label(x_sign)},{sign_label(y_sign)}) "
                         f"covers {len(dangerous_states)} state(s), "
                         f"must not choose {forbidden_advisory}"
                     ),
-                })
+                    forbidden_advisory=forbidden_advisory,
+                    forbidden_advisory_idx=advisory_index[forbidden_advisory],
+                    dangerous_xy=list(dangerous_states),
+                    n_states_covered=len(dangerous_states),
+                    contract_type="range",
+                ))
                 contract_id += 1
 
         return contracts
@@ -148,11 +149,11 @@ class AcasContractGenerator:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Generate ACAS Xu A/G contract specs (range-based) for CROWN.",
+        description="Generate ACAS Xu A/G safety contract specs (range-based).",
     )
     parser.add_argument(
         "--output",
-        default="contracts/crown/safety_full_contracts.json",
+        default="contracts/crown/discrete/safety/safety_full_contracts.json",
         help="Output JSON path",
     )
     parser.add_argument(
@@ -165,7 +166,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    generator = AcasContractGenerator.from_yaml()
+    generator = AcasSafetyContractGenerator.from_yaml()
     domain = generator.domain
 
     print("Enumerating dangerous (state, advisory) pairs...")
@@ -197,39 +198,37 @@ def main() -> None:
         print("Dry run -- no file written.")
         return
 
-    report = {
-        "description": "ACAS Xu closed-loop A/G contract specs (range-based)",
-        "physics": {
-            "degree_multiplier": domain.degree_multiplier,
-            "seconds_per_update": domain.seconds_per_update,
-            "speed_own": domain.speed_own,
-            "speed_int": domain.speed_int,
-            "heading_int_degrees": domain.heading_int_degrees,
-            "safety_threshold": domain.safety_threshold,
-            "heading_update_order": (
-                "heading updated first (sequential env_update), "
-                "then position computed with new heading"
+    AcasSafetyContract.dump_json(
+        contracts,
+        args.output,
+        description="ACAS Xu closed-loop A/G contract specs (range-based)",
+        extra_meta={
+            "physics": {
+                "degree_multiplier": domain.degree_multiplier,
+                "seconds_per_update": domain.seconds_per_update,
+                "speed_own": domain.speed_own,
+                "speed_int": domain.speed_int,
+                "heading_int_degrees": domain.heading_int_degrees,
+                "safety_threshold": domain.safety_threshold,
+                "heading_update_order": (
+                    "heading updated first (sequential env_update), "
+                    "then position computed with new heading"
+                ),
+            },
+            "contract_type": (
+                "range-based: bounding box over (x_mag,y_mag) "
+                "for fixed (heading,sign,advisory)"
             ),
+            "nn_mapping": {
+                a_prev: {"network_idx": network_idx, "onnx": onnx_path}
+                for a_prev, (network_idx, onnx_path) in domain.a_prev_to_nn.items()
+            },
+            "total_dangerous_pairs": len(pairs),
+            "total_groups": num_groups,
+            "total_contracts": len(contracts),
         },
-        "contract_type": (
-            "range-based: bounding box over (x_mag,y_mag) "
-            "for fixed (heading,sign,advisory)"
-        ),
-        "nn_mapping": {
-            a_prev: {"network_idx": network_idx, "onnx": onnx_path}
-            for a_prev, (network_idx, onnx_path) in domain.a_prev_to_nn.items()
-        },
-        "total_dangerous_pairs": len(pairs),
-        "total_groups": num_groups,
-        "total_contracts": len(contracts),
-        "contracts": contracts,
-    }
-
-    output_path = Path(args.output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as handle:
-        json.dump(report, handle, indent=2)
-    print(f"Saved {len(contracts)} contracts to {output_path}")
+    )
+    print(f"Saved {len(contracts)} contracts to {args.output}")
 
 
 if __name__ == "__main__":

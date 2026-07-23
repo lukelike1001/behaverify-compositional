@@ -6,16 +6,20 @@ Each tick's advisory is treated as nondeterministic (any of the 5), which can
 only enlarge the reachable set relative to the real system -- sound over-approx
 for classifying and pruning contracts.
 
-Uses AcasDomain + AcasAugmentedState. Orthogonal to acas_viability.py.
+Uses AcasDomain + AcasAugmentedState. Orthogonal to acas_viability.py
+(V = can stay safe; R = what nondeterministic closed loop may visit).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from acas_domain import AcasDomain
-from acas_state import AcasAugmentedState, AcasState
+from core.acas_domain import AcasDomain
+from core.acas_state import AcasAugmentedState, AcasState
+
+if TYPE_CHECKING:
+    from core.acas_viability import AcasViabilityKernel
 
 # Edge key for abstract BFS: (augmented state, next advisory). Same type whether
 # the edge is allowed or blocked -- distinction is set membership only.
@@ -95,6 +99,108 @@ class AcasReachableSet:
 
     def __contains__(self, state: AcasAugmentedState) -> bool:
         return state in self.states
+
+    # ------------------------------------------------------------------
+    # Views over R
+    # ------------------------------------------------------------------
+
+    def physical_states(self) -> frozenset[AcasState]:
+        """Plant configurations that appear in R under any a_prev."""
+        return frozenset(state.physical() for state in self.states)
+
+    def plant_unsafe_states(
+        self,
+        kernel: AcasViabilityKernel,
+    ) -> list[AcasAugmentedState]:
+        """
+        Augmented states in R whose plant part violates the rho safety threshold.
+
+        Uses kernel.is_plant_safe (threshold), not membership in V.
+        """
+        unsafe = [
+            state for state in self.states
+            if not kernel.is_plant_safe(state)
+        ]
+        return sorted(unsafe, key=lambda state: state.as_tuple())
+
+    def viable_pairs(
+        self,
+        kernel: AcasViabilityKernel,
+    ) -> frozenset[AcasAugmentedState]:
+        """I0: pairs in R whose plant state lies in the viability kernel V."""
+        return frozenset(
+            state for state in self.states
+            if state.physical() in kernel.V
+        )
+
+    def pairs_needing_nn_constraint(
+        self,
+        kernel: AcasViabilityKernel,
+    ) -> list[AcasAugmentedState]:
+        """
+        Viable pairs where some advisory can exit V (NN must forbid those).
+
+        Sorted for stable report / CHECK output.
+        """
+        need = [
+            state for state in self.viable_pairs(kernel)
+            if kernel.some_advisory_exits_viability(state.physical())
+        ]
+        return sorted(need, key=lambda state: state.as_tuple())
+
+    def all_plant_safe(self, kernel: AcasViabilityKernel) -> bool:
+        """True iff every state in R meets the plant safety threshold."""
+        return all(kernel.is_plant_safe(state) for state in self.states)
+
+    def corridor_seed_to_unique_unsafe(
+        self,
+        kernel: AcasViabilityKernel,
+        *,
+        verbose: bool = False,
+    ) -> list[AcasAugmentedState]:
+        """
+        Walk unique predecessors from the unique plant-unsafe state in R back
+        to the seed (report-style corridor).
+
+        Requires exactly one plant-unsafe augmented state in this set.
+        Predecessor relation uses kernel.successors (plant step under the
+        advisory that becomes a_prev of the successor).
+        """
+        unsafe = self.plant_unsafe_states(kernel)
+        if len(unsafe) != 1:
+            raise ValueError(
+                f"corridor expects exactly one plant-unsafe state in R, "
+                f"got {len(unsafe)}: {unsafe}"
+            )
+
+        successors = kernel.successors
+        corridor = [unsafe[0]]
+        seed_physical = self.seed.physical()
+
+        while True:
+            current = corridor[-1]
+            current_physical = current.physical()
+            a_prev = current.a_prev
+            predecessors = [
+                state for state in self.states
+                if state != current
+                and successors[state.physical()][a_prev] == current_physical
+            ]
+            if verbose:
+                print(f"[CHECK] predecessors of {current.as_tuple()}: "
+                      f"{[state.as_tuple() for state in predecessors]}")
+            if len(predecessors) != 1:
+                break
+            corridor.append(predecessors[0])
+            if corridor[-1].physical() == seed_physical:
+                break
+
+        corridor.reverse()
+        return corridor
+
+    # ------------------------------------------------------------------
+    # Contract helpers
+    # ------------------------------------------------------------------
 
     def dangerous_xy(
         self,

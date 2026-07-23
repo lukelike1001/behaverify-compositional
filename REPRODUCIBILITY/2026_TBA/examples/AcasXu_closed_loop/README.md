@@ -45,24 +45,23 @@ AcasXu_closed_loop/
 ├── networks/                               # 5 ONNX files (see networks/README.md)
 ├── contracts/
 │   └── crown/
-│       ├── safety_full_contracts.json            # Full safety A/G specs (range; discrete+continuous)
 │       ├── continuous/                           # frozen continuous CROWN results until after TACAS
 │       │   ├── enabled_pgd/
 │       │   └── disabled_pgd/
 │       └── discrete/
-│           ├── safety_corridor_contracts.json    # Corridor safety specs (2 contracts)
-│           ├── safety_corridor_contract_results.json
-│           ├── liveness_contracts.json           # Equals/pin specs (52)
-│           ├── liveness_contract_results.json
-│           └── archive/                          # Orphaned full-table discrete results
+│           ├── safety/
+│           │   ├── safety_full_contracts.json    # Full safety A/G specs (range)
+│           │   ├── safety_corridor_*.json        # Corridor safety specs/results
+│           │   └── archive/                      # Full-table discrete CROWN results
+│           └── liveness/
+│               ├── liveness_contracts.json       # Equals contracts (52)
+│               └── liveness_contract_results.json
 ├── results/
-│   ├── monolithic/                         # nuXmv output and report for the monolithic run
-│   └── compositional/
-│       ├── continuous/
-│       │   └── enabled_pgd/
-│       │       └── aprev_*/                # Pipeline output per NN
-│       └── discrete/
-│           └── all_nns/                    # Discrete compositional pipeline output (all 5 NNs)
+│   ├── continuous/                         # Continuous compositional outputs (ignore / sparse)
+│   ├── discrete/
+│   │   ├── safety/                         # Corridor, reachability report, discrete safety pipelines
+│   │   └── liveness/                       # Liveness SMV / nuXmv / pipeline reports
+│   └── monolithic/                         # nuXmv output for monolithic runs
 ├── symbolic/
 │   └── smv/                               # Generated base SMV (reused via --skip-smv)
 ├── figures/                                # Visualization scripts and outputs
@@ -73,10 +72,10 @@ AcasXu_closed_loop/
 ├── acas_template_360.tree                  # Template for the closed-loop model
 ├── generate_acas_tree.py                   # Fills in template → tree/acas_360.tree
 ├── acas_domain.py                          # Plant physics (AcasDomain)
-├── acas_contract_generator.py              # Enumerate dangerous states → range contract specs
-├── acas_contract_verifier.py                # Verify contract specs via CROWN (serial)
+├── acas_safety_contract_generator.py              # Enumerate dangerous states → range contract specs
+├── acas_safety_contract_verifier.py                # Verify contract specs via CROWN (serial)
 ├── verify_acas_contracts_parallel.py       # Parallel retry wrapper for TIMEOUT contracts
-├── acas_verifier_params.yaml       # Config for acas_contract_verifier.py
+├── acas_verifier_params.yaml       # Config for acas_safety_contract_verifier.py
 ├── run_acas_compositional_pipeline.py      # End-to-end compositional pipeline (single NN)
 ├── run_all_continuous_pipelines.sh         # Batch: run compositional pipeline for all NNs
 ├── run_acas_monolithic_pipelines.sh        # Monolithic vs. discrete compositional benchmark
@@ -224,8 +223,8 @@ Report **User time** from the output.
 The compositional pipeline has four stages:
 
 ```
-acas_contract_generator.py  →  contract specs JSON
-acas_contract_verifier.py    →  CROWN verification results JSON
+acas_safety_contract_generator.py  →  contract specs JSON
+acas_safety_contract_verifier.py    →  CROWN verification results JSON
 run_acas_compositional_pipeline.py  →  contract-injected SMV  →  nuXmv verdict
 ```
 
@@ -244,13 +243,13 @@ range-based A/G contracts (bounding box over `x_mag`, `y_mag` for fixed
 `heading_own_var`, sign quadrant, and forbidden advisory).
 
 ```bash
-python3 acas_contract_generator.py
-# Output: contracts/crown/safety_full_contracts.json
+python3 acas_safety_contract_generator.py
+# Output: contracts/crown/discrete/safety/safety_full_contracts.json
 # Expected: ~490 contracts for NN_1 (one per non-empty heading/sign/advisory group)
 ```
 
 This step is fast (~1 minute) and does not require CROWN. The output is
-already committed in `contracts/crown/safety_full_contracts.json`.
+already committed in `contracts/crown/discrete/safety/safety_full_contracts.json`.
 
 ---
 
@@ -259,7 +258,7 @@ already committed in `contracts/crown/safety_full_contracts.json`.
 #### Pilot run (sanity check before committing to a full run)
 
 ```bash
-python acas_contract_verifier.py --limit 5
+python acas_safety_contract_verifier.py --limit 5
 ```
 
 Expected output: a mix of SAT (~0.5s each) and TIMEOUT (30s each).
@@ -270,7 +269,7 @@ Edit `acas_verifier_params.yaml` if you need to change the timeout or output
 path. The default is 30s per contract, NN_1 only.
 
 ```bash
-nohup python acas_contract_verifier.py > results/verify_nn1.log 2>&1 &
+nohup python acas_safety_contract_verifier.py > results/verify_nn1.log 2>&1 &
 ```
 
 Expected: ~269 SAT, ~221 TIMEOUT, ~113 minutes total.
@@ -278,7 +277,7 @@ Expected: ~269 SAT, ~221 TIMEOUT, ~113 minutes total.
 #### Second-pass retry (higher timeout for TIMEOUT contracts)
 
 ```bash
-nohup python acas_contract_verifier.py \
+nohup python acas_safety_contract_verifier.py \
     --retry-from contracts/crown/continuous/enabled_pgd/aprev_clear_crown_results.json \
     --timeout 60 \
     > results/verify_nn1_retry.log 2>&1 &
@@ -301,7 +300,7 @@ Using pre-computed contracts (skip tree/SMV regeneration):
 ```bash
 python run_acas_compositional_pipeline.py \
     --contracts contracts/crown/continuous/enabled_pgd/aprev_clear_crown_results.json \
-    --output    results/compositional/continuous/enabled_pgd/aprev_clear \
+    --output    results/continuous/enabled_pgd/aprev_clear \
     --skip-tree --skip-smv
 ```
 
@@ -313,7 +312,7 @@ python run_acas_compositional_pipeline.py \
     --output    results/compositional/continuous/enabled_pgd/aprev_clear
 ```
 
-Results are written to `results/compositional/continuous/enabled_pgd/aprev_clear/pipeline_report.json`.
+Results are written to `results/continuous/enabled_pgd/aprev_clear/pipeline_report.json`.
 
 ---
 
@@ -371,7 +370,7 @@ Contract coverage is incomplete. Some TIMEOUT contracts leave holes in the
 abstraction that nuXmv uses to find a spurious path. Run the second-pass retry
 with a higher timeout. See the grid-world README for the same pattern.
 
-### `acas_contract_verifier.py` gives wrong results with `--retry-from`
+### `acas_safety_contract_verifier.py` gives wrong results with `--retry-from`
 
 The retry merges results by contract `id`. If `safety_full_contracts.json` was
 regenerated after the original verification run (changing contract `id`s), the
@@ -395,7 +394,7 @@ The compositional patched SMV is ~1,600 lines and uses far less memory.
 
 ### `run_acas_compositional_pipeline.py` gives `INVARSPEC=None`
 
-Check `results/compositional/continuous/enabled_pgd/aprev_clear/nuxmv_output.txt` for nuXmv error messages.
+Check `results/continuous/enabled_pgd/aprev_clear/nuxmv_output.txt` for nuXmv error messages.
 Common causes: SMV type errors (see `--skip-smv` flag to reuse a known-good
 base SMV), or missing nuXmv binary.
 

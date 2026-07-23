@@ -34,7 +34,7 @@ import yaml
 # ---------------------------------------------------------------------------
 
 def _load_params() -> dict:
-    path = Path(__file__).parent / "acas_model_params.yaml"
+    path = Path(__file__).parent / "core" / "acas_model_params.yaml"
     with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 

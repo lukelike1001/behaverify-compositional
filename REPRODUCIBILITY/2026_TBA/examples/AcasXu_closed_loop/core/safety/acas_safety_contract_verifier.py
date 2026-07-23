@@ -1,12 +1,10 @@
 """
-acas_contract_verifier.py
+acas_safety_contract_verifier.py
 
-ACAS Xu façade for discharging A/G safety contracts via alpha-beta-CROWN.
+Safety-side ACAS façade: discharge AcasSafetyContract via alpha-beta-CROWN.
 
-ACAS example code should call AcasContractVerifier (not CrownVerifier directly).
-CROWN plumbing lives in pipeline/neuro/crown/crown_verifier.py.
+Uses CrownVerifier under the hood. Liveness (equals pins) is a separate track.
 
-Safety A/G (this module, v1):
   - continuous: one never-selects call on the range box
   - discrete: one never-selects call per dangerous lattice point (short-circuit UNSAT)
 
@@ -14,9 +12,9 @@ Configuration: acas_verifier_params.yaml
 
 Usage (from AcasXu_closed_loop/):
 
-    python3 acas_contract_verifier.py
-    python3 acas_contract_verifier.py --limit 5
-    python3 acas_contract_verifier.py --discrete --network-idx 1
+    python3 acas_safety_contract_verifier.py
+    python3 acas_safety_contract_verifier.py --limit 5
+    python3 acas_safety_contract_verifier.py --discrete --network-idx 1
 """
 
 from __future__ import annotations
@@ -33,22 +31,24 @@ from typing import Any
 
 import yaml
 
-_HERE = Path(__file__).parent.resolve()
-_TBA = (_HERE / "../../").resolve()
+from core.paths import EXAMPLE_ROOT
+
+_TBA = (EXAMPLE_ROOT / "../..").resolve()
 if str(_TBA) not in sys.path:
     sys.path.insert(0, str(_TBA))
 
 from pipeline.neuro.crown.crown_verifier import CrownVerifier  # noqa: E402
 
-from acas_domain import AcasDomain  # noqa: E402
+from core.acas_contract import AcasSafetyContract  # noqa: E402
+from core.acas_domain import AcasDomain  # noqa: E402
 
-DEFAULT_VERIFIER_PARAMS = _HERE / "acas_verifier_params.yaml"
+DEFAULT_VERIFIER_PARAMS = EXAMPLE_ROOT / "core" / "acas_verifier_params.yaml"
 
 
 @dataclass
-class AcasContractVerifier:
+class AcasSafetyContractVerifier:
     """
-    Batch / single-contract safety verification for ACAS Xu range specs.
+    Batch / single-contract safety verification for AcasSafetyContract.
 
     Construct with from_yaml / from_config. Holds domain + CrownVerifier.
     """
@@ -65,7 +65,6 @@ class AcasContractVerifier:
     discrete_state_eps: float = 0.0
     pgd_order: str = "skip"
     device: str = "cpu"
-    # retained for report metadata / pipeline-shared yaml
     raw_config: dict[str, Any] = field(default_factory=dict, repr=False)
 
     # ------------------------------------------------------------------
@@ -84,7 +83,7 @@ class AcasContractVerifier:
         path: Path | str | None = None,
         *,
         domain: AcasDomain | None = None,
-    ) -> AcasContractVerifier:
+    ) -> AcasSafetyContractVerifier:
         return cls.from_config(cls.load_yaml(path), domain=domain)
 
     @classmethod
@@ -93,7 +92,7 @@ class AcasContractVerifier:
         config: dict[str, Any],
         *,
         domain: AcasDomain | None = None,
-    ) -> AcasContractVerifier:
+    ) -> AcasSafetyContractVerifier:
         plant = domain if domain is not None else AcasDomain.from_yaml()
         verification = config.get("verification", {})
         discrete = bool(config.get("discrete", False))
@@ -138,28 +137,34 @@ class AcasContractVerifier:
             device=self.device,
         )
 
+    def _resolve_onnx_path(self, onnx: str) -> str:
+        path = Path(onnx)
+        if path.is_file():
+            return str(path)
+        candidate = EXAMPLE_ROOT / onnx
+        if candidate.is_file():
+            return str(candidate)
+        return str(path)
+
     # ------------------------------------------------------------------
     # Contract loading
     # ------------------------------------------------------------------
 
-    def load_contracts(
+    def load_safety_contracts(
         self,
         *,
         limit: int | None = None,
         retry_from: Path | str | None = None,
-    ) -> tuple[list[dict[str, Any]], dict[int, dict[str, Any]]]:
+    ) -> tuple[list[AcasSafetyContract], dict[int, dict[str, Any]]]:
         """
-        Load specs for self.network_idx.
+        Load AcasSafetyContract specs for self.network_idx.
 
         Returns (contracts_to_verify, previous_records_by_id).
-        previous_records is non-empty only in retry mode.
         """
-        with open(self.contracts_path, encoding="utf-8") as handle:
-            spec_data = json.load(handle)
-
         contracts = [
-            contract for contract in spec_data["contracts"]
-            if contract["network_idx"] == self.network_idx
+            contract
+            for contract in AcasSafetyContract.load_json(self.contracts_path)
+            if contract.network_idx == self.network_idx
         ]
         if not contracts:
             raise SystemExit(
@@ -181,7 +186,7 @@ class AcasContractVerifier:
             }
             contracts = [
                 contract for contract in contracts
-                if contract["id"] in timeout_ids
+                if contract.contract_id in timeout_ids
             ]
             print(
                 f"Retry mode: {len(contracts)} TIMEOUT contracts from {retry_from}"
@@ -196,37 +201,36 @@ class AcasContractVerifier:
     # Single-contract verification
     # ------------------------------------------------------------------
 
-    def verify_contract(self, contract: dict[str, Any], onnx_path: str) -> str:
+    def verify_contract(self, contract: AcasSafetyContract) -> str:
         """Verify one safety A/G contract; returns SAT / UNSAT / TIMEOUT."""
         if self.discrete:
-            return self._verify_discrete(contract, onnx_path)
-        return self._verify_continuous(contract, onnx_path)
+            return self._verify_discrete(contract)
+        return self._verify_continuous(contract)
 
-    def _verify_continuous(self, contract: dict[str, Any], onnx_path: str) -> str:
+    def _verify_continuous(self, contract: AcasSafetyContract) -> str:
+        onnx_path = self._resolve_onnx_path(contract.onnx)
+        lower, upper = contract.crown_input_bounds()
         status, _ = self.crown_verifier.certify_network_never_selects_class(
             onnx_path=onnx_path,
-            input_lower_bounds=contract["nn_input_lower"],
-            input_upper_bounds=contract["nn_input_upper"],
-            forbidden_class_index=contract["forbidden_advisory_idx"],
+            input_lower_bounds=lower,
+            input_upper_bounds=upper,
+            forbidden_class_index=contract.forbidden_advisory_idx,
             number_of_classes=self.num_classes,
         )
         return status
 
-    def _verify_discrete(self, contract: dict[str, Any], onnx_path: str) -> str:
+    def _verify_discrete(self, contract: AcasSafetyContract) -> str:
         """
         One CROWN call per dangerous lattice point; short-circuit on UNSAT.
-        lower=upper=exact NN inputs (optional symmetric eps from config).
         """
-        x_sign = contract["x_sign"]
-        y_sign = contract["y_sign"]
-        heading_var = contract["heading_own_var"]
-        forbidden_idx = contract["forbidden_advisory_idx"]
+        onnx_path = self._resolve_onnx_path(contract.onnx)
         timeout_seen = False
         eps = self.discrete_state_eps
 
-        for x_mag, y_mag in contract["dangerous_xy"]:
+        for x_mag, y_mag in contract.dangerous_xy:
             exact = self.domain.compute_nn_inputs(
-                x_mag, y_mag, x_sign, y_sign, heading_var,
+                x_mag, y_mag, contract.x_sign, contract.y_sign,
+                contract.heading_own_var,
             )
             if eps == 0.0:
                 lower = exact
@@ -238,7 +242,7 @@ class AcasContractVerifier:
                 onnx_path=onnx_path,
                 input_lower_bounds=lower,
                 input_upper_bounds=upper,
-                forbidden_class_index=forbidden_idx,
+                forbidden_class_index=contract.forbidden_advisory_idx,
                 number_of_classes=self.num_classes,
             )
             if status == "UNSAT":
@@ -260,33 +264,40 @@ class AcasContractVerifier:
         a_prev: str,
         onnx_path: str | None = None,
     ) -> str:
-        """
-        Ad-hoc single lattice point (replaces verify_single_state.py).
-
-        Uses discrete-style never-selects on exact NN inputs.
-        """
+        """Ad-hoc single lattice point via a one-cell AcasSafetyContract."""
         if forbidden_advisory not in self.domain.adv_idx:
             raise ValueError(f"unknown forbidden_advisory={forbidden_advisory!r}")
         if a_prev not in self.domain.a_prev_to_nn:
             raise ValueError(f"unknown a_prev={a_prev!r}")
 
+        network_idx, onnx_rel = self.domain.a_prev_to_nn[a_prev]
         if onnx_path is None:
-            _network_idx, onnx_rel = self.domain.a_prev_to_nn[a_prev]
-            onnx_path = str(_HERE / onnx_rel)
+            onnx_path = str(EXAMPLE_ROOT / onnx_rel)
 
-        synthetic = {
-            "x_sign": x_sign,
-            "y_sign": y_sign,
-            "heading_own_var": heading_own_var,
-            "forbidden_advisory_idx": self.domain.adv_idx[forbidden_advisory],
-            "dangerous_xy": [[x_mag, y_mag]],
-        }
-        # Point queries always use the discrete path.
+        exact = self.domain.compute_nn_inputs(
+            x_mag, y_mag, x_sign, y_sign, heading_own_var,
+        )
+        synthetic = AcasSafetyContract(
+            contract_id=0,
+            a_prev=a_prev,
+            network_idx=network_idx,
+            onnx=onnx_path,
+            heading_own_var=heading_own_var,
+            x_sign=x_sign,
+            y_sign=y_sign,
+            nn_input_lower=list(exact),
+            nn_input_upper=list(exact),
+            forbidden_advisory=forbidden_advisory,
+            forbidden_advisory_idx=self.domain.adv_idx[forbidden_advisory],
+            dangerous_xy=[(x_mag, y_mag)],
+            n_states_covered=1,
+            contract_type="range",
+        )
         was_discrete = self.discrete
         self.discrete = True
         self.rebuild_crown_verifier(self.discrete_timeout_sec)
         try:
-            return self._verify_discrete(synthetic, onnx_path)
+            return self._verify_discrete(synthetic)
         finally:
             self.discrete = was_discrete
             self.rebuild_crown_verifier()
@@ -324,17 +335,17 @@ class AcasContractVerifier:
 
     def verify_all(
         self,
-        contracts: list[dict[str, Any]],
+        contracts: list[AcasSafetyContract],
         *,
         previous_records: dict[int, dict[str, Any]] | None = None,
         retry_from: Path | str | None = None,
     ) -> tuple[list[dict[str, Any]], float, str]:
         """
-        Verify every contract; return (records, total_wall_sec, mode_str).
+        Verify every safety contract; return (records, total_wall_sec, mode_str).
 
-        If retry_from / previous_records is set, merge new results into previous.
+        Result records stay plain dicts for JSON reports.
         """
-        onnx_path = contracts[0]["onnx"]
+        onnx_path = contracts[0].onnx
         mode_str = self.mode_description()
         print(
             f"Verifying {len(contracts)} contracts for NN_{self.network_idx} "
@@ -356,33 +367,33 @@ class AcasContractVerifier:
 
         for index, contract in enumerate(contracts):
             t0 = time.perf_counter()
-            status = self.verify_contract(contract, onnx_path)
+            status = self.verify_contract(contract)
             wall_sec = time.perf_counter() - t0
 
             def sign_label(value: int) -> str:
                 return "+" if value == 1 else "-"
 
             quad = (
-                f"({sign_label(contract['x_sign'])},"
-                f"{sign_label(contract['y_sign'])})"
+                f"({sign_label(contract.x_sign)},"
+                f"{sign_label(contract.y_sign)})"
             )
             print(
-                f"{index + 1:<5} {contract['heading_own_var']:>7} {quad:>6} "
-                f"{contract['forbidden_advisory']:<14} "
-                f"{contract['n_states_covered']:>6} "
+                f"{index + 1:<5} {contract.heading_own_var:>7} {quad:>6} "
+                f"{contract.forbidden_advisory:<14} "
+                f"{contract.n_states_covered:>6} "
                 f"{wall_sec:>6.1f} {status:<10} {self.result_marker(status)}"
             )
             sys.stdout.flush()
 
             new_records.append({
-                "id": contract["id"],
-                "heading_own_var": contract["heading_own_var"],
-                "x_sign": contract["x_sign"],
-                "y_sign": contract["y_sign"],
-                "forbidden_advisory": contract["forbidden_advisory"],
-                "forbidden_advisory_idx": contract["forbidden_advisory_idx"],
-                "n_states_covered": contract["n_states_covered"],
-                "dangerous_xy": contract["dangerous_xy"],
+                "id": contract.contract_id,
+                "heading_own_var": contract.heading_own_var,
+                "x_sign": contract.x_sign,
+                "y_sign": contract.y_sign,
+                "forbidden_advisory": contract.forbidden_advisory,
+                "forbidden_advisory_idx": contract.forbidden_advisory_idx,
+                "n_states_covered": contract.n_states_covered,
+                "dangerous_xy": [list(xy) for xy in contract.dangerous_xy],
                 "wall_sec": round(wall_sec, 3),
                 "status": status,
             })
@@ -393,7 +404,9 @@ class AcasContractVerifier:
             merged = dict(previous_records)
             merged.update({record["id"]: record for record in new_records})
             records = sorted(merged.values(), key=lambda record: record["id"])
-            improved = sum(1 for record in new_records if record["status"] == "SAT")
+            improved = sum(
+                1 for record in new_records if record["status"] == "SAT"
+            )
             print(
                 f"\nRetry improved {improved}/{len(new_records)} contracts to SAT"
             )
@@ -447,7 +460,7 @@ class AcasContractVerifier:
         retry_from: Path | str | None = None,
         timeout_override: float | None = None,
     ) -> list[dict[str, Any]]:
-        """Load contracts, verify all, write report. Returns result records."""
+        """Load safety contracts, verify all, write report."""
         if timeout_override is not None:
             self.timeout_sec = float(timeout_override)
             if not self.discrete:
@@ -455,7 +468,7 @@ class AcasContractVerifier:
         if self.discrete:
             self.rebuild_crown_verifier(self.discrete_timeout_sec)
 
-        contracts, previous_records = self.load_contracts(
+        contracts, previous_records = self.load_safety_contracts(
             limit=limit,
             retry_from=retry_from,
         )
@@ -464,15 +477,16 @@ class AcasContractVerifier:
             previous_records=previous_records or None,
             retry_from=retry_from,
         )
-        onnx_path = contracts[0]["onnx"]
-        report = self.build_report(records, onnx_path, total_wall, mode_str)
+        report = self.build_report(
+            records, contracts[0].onnx, total_wall, mode_str,
+        )
         self.write_report(report)
         return records
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Verify ACAS Xu A/G contracts via alpha-beta-CROWN.",
+        description="Verify ACAS Xu safety A/G contracts via alpha-beta-CROWN.",
     )
     parser.add_argument(
         "--config",
@@ -507,7 +521,6 @@ def main() -> None:
         "--discrete-timeout", type=float, default=None, dest="discrete_timeout",
         help="Per-state timeout for discrete mode",
     )
-    # Point-query mode (replaces verify_single_state.py)
     parser.add_argument(
         "--point", action="store_true",
         help="Verify a single lattice point instead of the contracts JSON batch",
@@ -527,7 +540,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    config = AcasContractVerifier.load_yaml(args.config)
+    config = AcasSafetyContractVerifier.load_yaml(args.config)
     if args.network_idx is not None:
         config["network_idx"] = args.network_idx
     if args.output is not None:
@@ -537,7 +550,7 @@ def main() -> None:
         if args.discrete_timeout is not None:
             config["discrete_timeout"] = args.discrete_timeout
 
-    verifier = AcasContractVerifier.from_config(config)
+    verifier = AcasSafetyContractVerifier.from_config(config)
 
     if args.point:
         required = [

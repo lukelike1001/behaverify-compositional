@@ -13,10 +13,11 @@ Plant state type: AcasState (see acas_state.py).
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 
-from acas_domain import AcasDomain
-from acas_state import AcasState
+from core.acas_domain import AcasDomain
+from core.acas_state import AcasAugmentedState, AcasState
 
 
 @dataclass(frozen=True)
@@ -110,9 +111,39 @@ class AcasViabilityKernel:
         """Full plant lattice (keys of the successor table)."""
         return frozenset(self.successors)
 
-    def is_plant_safe(self, state: AcasState | tuple) -> bool:
-        """True iff rho(state) meets the domain safety threshold (not membership in V)."""
-        return self.domain.is_safe(state[0], state[1])
+    def is_plant_safe(
+        self,
+        state: AcasState | AcasAugmentedState | tuple,
+    ) -> bool:
+        """
+        True iff rho(state) meets the domain safety threshold.
+
+        Not the same as membership in V (viability).
+        """
+        if isinstance(state, (AcasState, AcasAugmentedState)):
+            return self.domain.is_safe(state.x_mag, state.y_mag)
+        return self.domain.is_safe(int(state[0]), int(state[1]))
+
+    def allowed_size_histogram(self) -> dict[int, int]:
+        """Histogram of |Allowed_V(s)| over s in V (sorted by size key)."""
+        counts = Counter(len(acts) for acts in self.allowed.values())
+        return dict(sorted(counts.items()))
+
+    def some_advisory_exits_viability(self, state: AcasState) -> bool:
+        """True if some advisory steps from state to a plant state outside V."""
+        if state not in self.successors:
+            raise KeyError(f"state not on plant lattice: {state}")
+        return any(
+            self.successors[state][advisory] not in self.V
+            for advisory in self.domain.advisories
+        )
+
+    def boundary_intersect(
+        self,
+        physical_states: frozenset[AcasState] | set[AcasState],
+    ) -> list[AcasState]:
+        """Sorted boundary(V) ∩ physical_states (stable CHECK output)."""
+        return sorted(self.boundary & frozenset(physical_states))
 
 
 if __name__ == "__main__":
@@ -124,4 +155,3 @@ if __name__ == "__main__":
         f"safe-but-doomed = {len(kernel.safe_but_doomed)}, "
         f"unsafe = {len(kernel.unsafe)}"
     )
-
