@@ -7,7 +7,7 @@
 # smv_variables is consumed by AcasSmvContractPatcher.
 
 # Pre-computed contract specs (output of acas_safety_contract_generator.py).
-contracts_path: "contracts/crown/discrete/safety/safety_full_contracts.json"
+contracts_path: "contracts/discrete/safety/safety_full_contracts.json"
 
 # Which NN to verify.  network_idx corresponds to the a_prev selector in the tree:
 #   1 = a_prev=clear        (aprev_clear.onnx)
@@ -42,7 +42,7 @@ verification:
 
 # Output path for verification report (relative to example root).
 # Override with --output for discrete mode or non-NN_1 runs.
-output_path: "contracts/crown/continuous/enabled_pgd/aprev_clear_crown_results.json"
+output_path: "contracts/continuous/enabled_pgd/aprev_clear_crown_results.json"
 
 # SMV variable names from acas_closed_loop.smv (dsl_to_nuxmv from the tree).
 # Used by AcasSmvContractPatcher for INVAR constraint injection.

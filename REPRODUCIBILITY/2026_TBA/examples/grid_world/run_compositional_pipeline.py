@@ -44,7 +44,7 @@ _TBA  = (_HERE / "../../").resolve()   # 2026_TBA/
 if str(_TBA) not in sys.path:
     sys.path.insert(0, str(_TBA))
 
-from pipeline.symbolic.nuxmv.nuxmv_verifier import NuxmvVerifier
+from pipeline.nuxmv_verifier import NuxmvVerifier
 from pipeline.pipeline_report_writer import PipelineReportWriter
 from grid_world_contract_verifier import run_verification
 from grid_world_pipeline_context import GridWorldPipelineContext

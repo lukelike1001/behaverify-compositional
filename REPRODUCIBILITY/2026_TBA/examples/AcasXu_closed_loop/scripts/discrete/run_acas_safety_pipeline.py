@@ -23,8 +23,8 @@ Usage (from AcasXu_closed_loop/):
 
     # Symbolic only (pre-verified corridor — April-style step 3)
     python3 scripts/discrete/run_acas_safety_pipeline.py \\
-        --specs contracts/crown/discrete/safety/safety_corridor_contracts.json \\
-        --results contracts/crown/discrete/safety/safety_corridor_contract_results.json \\
+        --specs contracts/discrete/safety/safety_corridor_contracts.json \\
+        --results contracts/discrete/safety/safety_corridor_contract_results.json \\
         --output results/discrete/safety/corridor \\
         --skip-contracts --skip-tree --skip-smv
 """
@@ -32,17 +32,14 @@ Usage (from AcasXu_closed_loop/):
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import time
-import tracemalloc
 from pathlib import Path
 from typing import Any
 
 _SCRIPTS = Path(__file__).resolve().parent  # scripts/discrete/
 _EXAMPLE = _SCRIPTS.parent.parent  # AcasXu_closed_loop/
 _TBA = (_EXAMPLE / "../..").resolve()
-_REPO_SRC = (_TBA / "src").resolve()
 
 if str(_TBA) not in sys.path:
     sys.path.insert(0, str(_TBA))
@@ -50,9 +47,9 @@ if str(_EXAMPLE) not in sys.path:
     sys.path.insert(0, str(_EXAMPLE))
 
 from pipeline.pipeline_report_writer import PipelineReportWriter  # noqa: E402
-from pipeline.process_memory import ProcessMemory  # noqa: E402
-from pipeline.symbolic.nuxmv.nuxmv_verifier import NuxmvVerifier  # noqa: E402
+from pipeline.nuxmv_verifier import NuxmvVerifier  # noqa: E402
 
+from core.acas_artifact_builder import AcasArtifactBuilder  # noqa: E402
 from core.acas_contract import AcasSafetyContract  # noqa: E402
 from core.acas_smv_contract_patcher import AcasSmvContractPatcher  # noqa: E402
 from core.safety.acas_safety_contract_generator import (  # noqa: E402
@@ -64,76 +61,16 @@ from core.safety.acas_safety_contract_verifier import (  # noqa: E402
 
 DEFAULT_NUXMV = _TBA / "nuXmv_DL/bin/nuXmv"
 DEFAULT_NUXMV_CMD = _TBA / "commands/nuxmv_commands/command_invar"
-DEFAULT_METAMODEL = _TBA / "metamodel/behaverify.tx"
 DEFAULT_VERIFIER_YAML = _EXAMPLE / "core" / "acas_verifier_params.yaml"
 DEFAULT_SPECS = (
-    _EXAMPLE / "contracts/crown/discrete/safety/safety_full_contracts.json"
+    _EXAMPLE / "contracts/discrete/safety/safety_full_contracts.json"
 )
 DEFAULT_RESULTS = (
-    _EXAMPLE / "contracts/crown/discrete/safety/safety_full_results.json"
+    _EXAMPLE / "contracts/discrete/safety/safety_full_results.json"
 )
 DEFAULT_OUTPUT = _EXAMPLE / "results/discrete/safety/full"
 DEFAULT_TREE = _EXAMPLE / "tree/acas_closed_loop.tree"
 DEFAULT_BASE_SMV = _EXAMPLE / "symbolic/smv/acas_closed_loop.smv"
-
-
-def _ensure_tree(*, skip: bool) -> dict[str, Any]:
-    print("\n" + "=" * 60)
-    print("[TREE] generation")
-    print("=" * 60)
-    if skip and DEFAULT_TREE.exists():
-        print(f"  Skipped — reusing {DEFAULT_TREE.relative_to(_EXAMPLE)}")
-        return {"wall_sec": 0.0, "skipped": True}
-    from core.acas_tree_generator import AcasTreeGenerator  # noqa: PLC0415
-
-    start = time.perf_counter()
-    AcasTreeGenerator(output_path=DEFAULT_TREE).generate()
-    wall = time.perf_counter() - start
-    print(f"  Generated {DEFAULT_TREE.relative_to(_EXAMPLE)} ({wall:.1f}s)")
-    return {"wall_sec": round(wall, 3), "skipped": False}
-
-
-def _ensure_smv(*, skip: bool) -> dict[str, Any]:
-    print("\n" + "=" * 60)
-    print("[SMV] base model generation")
-    print("=" * 60)
-    if skip and DEFAULT_BASE_SMV.exists():
-        print(f"  Skipped — reusing {DEFAULT_BASE_SMV.relative_to(_EXAMPLE)}")
-        return {"wall_sec": 0.0, "skipped": True}
-    if not DEFAULT_TREE.is_file():
-        raise FileNotFoundError(f"tree missing: {DEFAULT_TREE}")
-    src_dir = str(_REPO_SRC)
-    if src_dir not in sys.path:
-        sys.path.insert(0, src_dir)
-    import dsl_to_nuxmv as dsl  # noqa: PLC0415
-
-    DEFAULT_BASE_SMV.parent.mkdir(parents=True, exist_ok=True)
-    tracemalloc.start()
-    start = time.perf_counter()
-    previous_cwd = os.getcwd()
-    os.chdir(str(_EXAMPLE))
-    try:
-        dsl.dsl_to_nuxmv(
-            str(DEFAULT_METAMODEL),
-            str(DEFAULT_TREE.relative_to(_EXAMPLE)),
-            str(DEFAULT_BASE_SMV.relative_to(_EXAMPLE)),
-            False, False, False, False,
-            10000, False, True, None,
-        )
-    finally:
-        os.chdir(previous_cwd)
-    wall = time.perf_counter() - start
-    _, peak_traced = tracemalloc.get_traced_memory()
-    tracemalloc.stop()
-    lines = DEFAULT_BASE_SMV.read_text(encoding="utf-8").count("\n")
-    print(f"  Generated {DEFAULT_BASE_SMV.relative_to(_EXAMPLE)} ({wall:.1f}s)")
-    return {
-        "wall_sec": round(wall, 3),
-        "smv_lines": lines,
-        "peak_traced_bytes": peak_traced,
-        "peak_rss_kb": ProcessMemory.peak_self_rss_kilobytes(),
-        "skipped": False,
-    }
 
 
 def _generate_contracts(specs_path: Path, eps: float) -> dict[str, Any]:
@@ -265,8 +202,9 @@ def main() -> None:
     results_path = results_path.resolve()
 
     pipeline_start = time.perf_counter()
-    tree_metrics = _ensure_tree(skip=args.skip_tree)
-    smv_metrics = _ensure_smv(skip=args.skip_smv)
+    builder = AcasArtifactBuilder(tree_path=DEFAULT_TREE, smv_path=DEFAULT_BASE_SMV)
+    tree_metrics = builder.ensure_tree(reuse_existing=args.skip_tree)
+    smv_metrics = builder.ensure_smv(reuse_existing=args.skip_smv)
 
     generate_metrics: dict[str, Any]
     crown_metrics: dict[str, Any]

@@ -86,7 +86,7 @@ AcasXu_closed_loop/
 │   │   └── run_acas_inductive_invariant_check.py
 │   └── continuous/
 │       └── run_all_continuous_pipelines.sh    # Deferred continuous batch
-├── contracts/crown/
+├── contracts/
 │   ├── continuous/                      # Frozen continuous CROWN results
 │   └── discrete/{safety,liveness}/      # Discrete specs + results (committed)
 ├── results/{discrete,monolithic,continuous}/  # Pipeline outputs (gitignored)
@@ -196,8 +196,8 @@ Reference outcome: `INVARSPEC: true`, ~49 s user time, ~9.6 GB peak RSS.
 ```bash
 # Symbolic only on pre-verified corridor contracts
 python3 scripts/discrete/run_acas_safety_pipeline.py \
-    --specs contracts/crown/discrete/safety/safety_corridor_contracts.json \
-    --results contracts/crown/discrete/safety/safety_corridor_contract_results.json \
+    --specs contracts/discrete/safety/safety_corridor_contracts.json \
+    --results contracts/discrete/safety/safety_corridor_contract_results.json \
     --output results/discrete/safety/corridor \
     --skip-contracts --skip-tree --skip-smv
 
@@ -233,7 +233,7 @@ then the safety pipeline with corridor JSON.
 
 `scripts/continuous/run_all_continuous_pipelines.sh` batches continuous-domain
 work. Frozen continuous CROWN results live under
-`contracts/crown/continuous/`. Prefer discrete pipelines for day-to-day runs.
+`contracts/continuous/`. Prefer discrete pipelines for day-to-day runs.
 
 ---
 

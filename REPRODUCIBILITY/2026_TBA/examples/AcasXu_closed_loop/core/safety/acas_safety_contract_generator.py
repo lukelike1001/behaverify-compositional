@@ -4,7 +4,7 @@ acas_safety_contract_generator.py
 Safety-side contract generation from plant physics (AcasDomain).
 
 Produces list[AcasSafetyContract] (range boxes over dangerous cells).
-CLI writes contracts/crown/discrete/safety/safety_full_contracts.json via dump_json.
+CLI writes contracts/discrete/safety/safety_full_contracts.json via dump_json.
 
 No CROWN; no liveness pins.
 
@@ -153,7 +153,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--output",
-        default="contracts/crown/discrete/safety/safety_full_contracts.json",
+        default="contracts/discrete/safety/safety_full_contracts.json",
         help="Output JSON path",
     )
     parser.add_argument(

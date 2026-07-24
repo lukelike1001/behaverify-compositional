@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import time
 from pathlib import Path
@@ -34,7 +33,6 @@ from typing import Any
 _SCRIPTS = Path(__file__).resolve().parent  # scripts/discrete/
 _EXAMPLE = _SCRIPTS.parent.parent  # AcasXu_closed_loop/
 _TBA = (_EXAMPLE / "../..").resolve()
-_REPO_SRC = (_TBA / "src").resolve()
 
 if str(_TBA) not in sys.path:
     sys.path.insert(0, str(_TBA))
@@ -42,8 +40,9 @@ if str(_EXAMPLE) not in sys.path:
     sys.path.insert(0, str(_EXAMPLE))
 
 from pipeline.pipeline_report_writer import PipelineReportWriter  # noqa: E402
-from pipeline.symbolic.nuxmv.nuxmv_verifier import NuxmvVerifier  # noqa: E402
+from pipeline.nuxmv_verifier import NuxmvVerifier  # noqa: E402
 
+from core.acas_artifact_builder import AcasArtifactBuilder  # noqa: E402
 from core.acas_smv_contract_patcher import AcasSmvContractPatcher  # noqa: E402
 from core.liveness.acas_liveness_contract_config import (  # noqa: E402
     AcasLivenessContractConfig,
@@ -57,59 +56,9 @@ from core.liveness.acas_liveness_contract_verifier import (  # noqa: E402
 
 DEFAULT_NUXMV = _TBA / "nuXmv_DL/bin/nuXmv"
 DEFAULT_NUXMV_CMD_COMBO = _TBA / "commands/nuxmv_commands/command_combo_invar_ctl"
-DEFAULT_METAMODEL = _TBA / "metamodel/behaverify.tx"
 DEFAULT_TREE = _EXAMPLE / "tree/acas_closed_loop.tree"
 DEFAULT_BASE_SMV = _EXAMPLE / "symbolic/smv/acas_closed_loop.smv"
 DEFAULT_OUTPUT = _EXAMPLE / "results/discrete/liveness"
-
-
-def _ensure_tree(*, skip: bool) -> dict[str, Any]:
-    print("\n" + "=" * 60)
-    print("[TREE] generation")
-    print("=" * 60)
-    if skip and DEFAULT_TREE.exists():
-        print(f"  Skipped — reusing {DEFAULT_TREE.relative_to(_EXAMPLE)}")
-        return {"wall_sec": 0.0, "skipped": True}
-    from core.acas_tree_generator import AcasTreeGenerator  # noqa: PLC0415
-
-    start = time.perf_counter()
-    AcasTreeGenerator(output_path=DEFAULT_TREE).generate()
-    wall = time.perf_counter() - start
-    print(f"  Generated {DEFAULT_TREE.relative_to(_EXAMPLE)} ({wall:.1f}s)")
-    return {"wall_sec": round(wall, 3), "skipped": False}
-
-
-def _ensure_smv(*, skip: bool) -> dict[str, Any]:
-    print("\n" + "=" * 60)
-    print("[SMV] base model generation")
-    print("=" * 60)
-    if skip and DEFAULT_BASE_SMV.exists():
-        print(f"  Skipped — reusing {DEFAULT_BASE_SMV.relative_to(_EXAMPLE)}")
-        return {"wall_sec": 0.0, "skipped": True}
-    if not DEFAULT_TREE.is_file():
-        raise FileNotFoundError(f"tree missing: {DEFAULT_TREE}")
-    src_dir = str(_REPO_SRC)
-    if src_dir not in sys.path:
-        sys.path.insert(0, src_dir)
-    import dsl_to_nuxmv as dsl  # noqa: PLC0415
-
-    DEFAULT_BASE_SMV.parent.mkdir(parents=True, exist_ok=True)
-    start = time.perf_counter()
-    previous_cwd = os.getcwd()
-    os.chdir(str(_EXAMPLE))
-    try:
-        dsl.dsl_to_nuxmv(
-            str(DEFAULT_METAMODEL),
-            str(DEFAULT_TREE.relative_to(_EXAMPLE)),
-            str(DEFAULT_BASE_SMV.relative_to(_EXAMPLE)),
-            False, False, False, False,
-            10000, False, True, None,
-        )
-    finally:
-        os.chdir(previous_cwd)
-    wall = time.perf_counter() - start
-    print(f"  Generated {DEFAULT_BASE_SMV.relative_to(_EXAMPLE)} ({wall:.1f}s)")
-    return {"wall_sec": round(wall, 3), "skipped": False}
 
 
 def _inject_ctl_eventually_far(smv: str, distance_threshold: int) -> str:
@@ -189,8 +138,9 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     pipeline_start = time.perf_counter()
 
-    tree_metrics = _ensure_tree(skip=args.skip_tree)
-    smv_metrics = _ensure_smv(skip=args.skip_smv)
+    builder = AcasArtifactBuilder(tree_path=DEFAULT_TREE, smv_path=DEFAULT_BASE_SMV)
+    tree_metrics = builder.ensure_tree(reuse_existing=args.skip_tree)
+    smv_metrics = builder.ensure_smv(reuse_existing=args.skip_smv)
 
     if args.skip_contracts:
         if not specs_path.is_file() or not results_path.is_file():

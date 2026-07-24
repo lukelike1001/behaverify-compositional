@@ -1,5 +1,5 @@
 """
-pipeline.symbolic.nuxmv.nuxmv_verifier — shared nuXmv subprocess adapter.
+pipeline.nuxmv_verifier — shared nuXmv subprocess adapter.
 
 Runs nuXmv on an SMV model with a command file, writes combined stdout/stderr,
 parses INVARSPEC / CTLSPEC verdicts, and returns pipeline metrics.

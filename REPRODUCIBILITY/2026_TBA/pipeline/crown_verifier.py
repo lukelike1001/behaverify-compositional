@@ -1,5 +1,5 @@
 """
-pipeline.neuro.crown.crown_verifier — shared alpha-beta-CROWN adapter.
+pipeline.crown_verifier — shared alpha-beta-CROWN adapter.
 
 Owns configuration + one input-box solve. Example scripts build lower/upper
 bounds and choose which classification property to certify:

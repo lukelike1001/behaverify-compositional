@@ -28,8 +28,6 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import json
-import os
 import re
 import sys
 import time
@@ -39,8 +37,6 @@ from typing import Any
 _SCRIPTS = Path(__file__).resolve().parent
 _EXAMPLE = _SCRIPTS.parent
 _TBA = (_EXAMPLE / "../..").resolve()
-# REPRODUCIBILITY/2026_TBA/src (dsl_to_nuxmv and friends)
-_REPO_SRC = (_TBA / "src").resolve()
 
 if str(_TBA) not in sys.path:
     sys.path.insert(0, str(_TBA))
@@ -48,80 +44,18 @@ if str(_EXAMPLE) not in sys.path:
     sys.path.insert(0, str(_EXAMPLE))
 
 from pipeline.pipeline_report_writer import PipelineReportWriter  # noqa: E402
-from pipeline.symbolic.nuxmv.nuxmv_verifier import NuxmvVerifier  # noqa: E402
+from pipeline.nuxmv_verifier import NuxmvVerifier  # noqa: E402
+
+from core.acas_artifact_builder import AcasArtifactBuilder  # noqa: E402
 
 DEFAULT_NUXMV = _TBA / "nuXmv_DL/bin/nuXmv"
 DEFAULT_NUXMV_CMD = _TBA / "commands/nuxmv_commands/command_all_invar"
-DEFAULT_METAMODEL = _TBA / "metamodel/behaverify.tx"
 DEFAULT_NEUS_REFERENCE = (
     _EXAMPLE / "../../../2025_NEUS/examples/AcasXu_closed_loop/invar.txt"
 ).resolve()
 DEFAULT_OUTPUT_DIR = _EXAMPLE / "results/monolithic"
 DEFAULT_TREE = _EXAMPLE / "tree/acas_closed_loop.tree"
 DEFAULT_SMV = _EXAMPLE / "symbolic/smv/acas_closed_loop.smv"
-
-
-def _ensure_tree(*, skip_if_exists: bool) -> dict[str, Any]:
-    print("\n" + "=" * 60)
-    print("[1/3] TREE GENERATION")
-    print("=" * 60)
-
-    if skip_if_exists and DEFAULT_TREE.exists():
-        print(f"  Skipped — reusing {DEFAULT_TREE.relative_to(_EXAMPLE)}")
-        return {"wall_sec": 0.0, "skipped": True}
-
-    from core.acas_tree_generator import AcasTreeGenerator  # noqa: PLC0415
-
-    start = time.perf_counter()
-    AcasTreeGenerator(output_path=DEFAULT_TREE).generate()
-    wall_sec = time.perf_counter() - start
-    print(f"  Generated {DEFAULT_TREE.relative_to(_EXAMPLE)}  ({wall_sec:.1f}s)")
-    return {"wall_sec": round(wall_sec, 3), "skipped": False}
-
-
-def _ensure_smv(*, skip_if_exists: bool) -> dict[str, Any]:
-    print("\n" + "=" * 60)
-    print("[2/3] BASE SMV GENERATION")
-    print("=" * 60)
-
-    if skip_if_exists and DEFAULT_SMV.exists():
-        print(f"  Skipped — reusing {DEFAULT_SMV.relative_to(_EXAMPLE)}")
-        return {"wall_sec": 0.0, "skipped": True}
-
-    if not DEFAULT_TREE.is_file():
-        raise FileNotFoundError(
-            f"tree missing at {DEFAULT_TREE}; cannot generate SMV"
-        )
-
-    src_dir = str(_REPO_SRC)
-    if src_dir not in sys.path:
-        sys.path.insert(0, src_dir)
-    import dsl_to_nuxmv as dsl  # noqa: PLC0415
-
-    DEFAULT_SMV.parent.mkdir(parents=True, exist_ok=True)
-    start = time.perf_counter()
-    previous_cwd = os.getcwd()
-    os.chdir(str(_EXAMPLE))
-    try:
-        dsl.dsl_to_nuxmv(
-            str(DEFAULT_METAMODEL),
-            str(DEFAULT_TREE.relative_to(_EXAMPLE)),
-            str(DEFAULT_SMV.relative_to(_EXAMPLE)),
-            False,
-            False,
-            False,
-            False,
-            10000,  # recursion_limit
-            False,  # keep_stage_0
-            True,   # skip_grammar_check
-            None,   # record_times
-        )
-    finally:
-        os.chdir(previous_cwd)
-
-    wall_sec = time.perf_counter() - start
-    print(f"  Generated {DEFAULT_SMV.relative_to(_EXAMPLE)}  ({wall_sec:.1f}s)")
-    return {"wall_sec": round(wall_sec, 3), "skipped": False}
 
 
 def _parse_neus_reference(reference_path: Path) -> dict[str, Any]:
@@ -219,8 +153,13 @@ def main() -> None:
 
     pipeline_start = time.perf_counter()
     # Generate tree/SMV only when missing (same as the old shell script).
-    tree_metrics = _ensure_tree(skip_if_exists=True)
-    smv_metrics = _ensure_smv(skip_if_exists=True)
+    builder = AcasArtifactBuilder(tree_path=DEFAULT_TREE, smv_path=DEFAULT_SMV)
+    tree_metrics = builder.ensure_tree(
+        reuse_existing=True, stage_label="[1/3] TREE GENERATION"
+    )
+    smv_metrics = builder.ensure_smv(
+        reuse_existing=True, stage_label="[2/3] BASE SMV GENERATION"
+    )
 
     report_path = output_dir / "pipeline_report.json"
     log_path = output_dir / "nuxmv_output.txt"

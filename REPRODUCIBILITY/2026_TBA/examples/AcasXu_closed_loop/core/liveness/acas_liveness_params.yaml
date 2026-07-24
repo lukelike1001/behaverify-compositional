@@ -2,8 +2,8 @@
 # Plant physics: acas_model_params.yaml / AcasDomain.
 
 trajectory_path: core/liveness/acas_lasso_trajectory.json
-specs_path: contracts/crown/discrete/liveness/liveness_contracts.json
-results_path: contracts/crown/discrete/liveness/liveness_contract_results.json
+specs_path: contracts/discrete/liveness/liveness_contracts.json
+results_path: contracts/discrete/liveness/liveness_contract_results.json
 
 # Half-width on NN inputs (0 = exact lattice point).
 nn_input_eps: 0.0

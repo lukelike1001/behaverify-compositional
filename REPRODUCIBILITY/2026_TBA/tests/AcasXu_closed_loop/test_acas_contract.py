@@ -1,7 +1,7 @@
 """
 Minimal tests for typed ACAS contract specs.
 
-Loads committed JSON under examples/AcasXu_closed_loop/contracts/crown/.
+Loads committed JSON under examples/AcasXu_closed_loop/contracts/.
 """
 
 from __future__ import annotations
@@ -21,12 +21,12 @@ if str(_EXAMPLE) not in sys.path:
 
 from core.acas_contract import AcasLivenessContract, AcasSafetyContract  # noqa: E402
 
-_CROWN = _EXAMPLE / "contracts" / "crown"
+_CONTRACTS = _EXAMPLE / "contracts"
 
 
 def test_load_safety_corridor() -> None:
     path = (
-        _CROWN / "discrete" / "safety" / "safety_corridor_contracts.json"
+        _CONTRACTS / "discrete" / "safety" / "safety_corridor_contracts.json"
     )
     contracts = AcasSafetyContract.load_json(path)
     assert len(contracts) == 2
@@ -37,7 +37,7 @@ def test_load_safety_corridor() -> None:
 
 
 def test_load_safety_full_sample() -> None:
-    path = _CROWN / "discrete" / "safety" / "safety_full_contracts.json"
+    path = _CONTRACTS / "discrete" / "safety" / "safety_full_contracts.json"
     contracts = AcasSafetyContract.load_json(path)
     assert len(contracts) > 100
     first = contracts[0]
@@ -46,7 +46,7 @@ def test_load_safety_full_sample() -> None:
 
 
 def test_load_liveness_contracts() -> None:
-    path = _CROWN / "discrete" / "liveness" / "liveness_contracts.json"
+    path = _CONTRACTS / "discrete" / "liveness" / "liveness_contracts.json"
     contracts = AcasLivenessContract.load_json(path)
     assert len(contracts) == 52
     assert all(isinstance(c, AcasLivenessContract) for c in contracts)
@@ -56,7 +56,7 @@ def test_load_liveness_contracts() -> None:
 
 def test_safety_round_trip() -> None:
     path = (
-        _CROWN / "discrete" / "safety" / "safety_corridor_contracts.json"
+        _CONTRACTS / "discrete" / "safety" / "safety_corridor_contracts.json"
     )
     original = AcasSafetyContract.load_json(path)[0]
     restored = AcasSafetyContract.from_dict(original.to_dict())
@@ -68,7 +68,7 @@ def test_safety_round_trip() -> None:
 
 
 def test_liveness_round_trip() -> None:
-    path = _CROWN / "discrete" / "liveness" / "liveness_contracts.json"
+    path = _CONTRACTS / "discrete" / "liveness" / "liveness_contracts.json"
     original = AcasLivenessContract.load_json(path)[0]
     restored = AcasLivenessContract.from_dict(original.to_dict())
     assert restored.contract_id == original.contract_id
@@ -79,7 +79,7 @@ def test_liveness_round_trip() -> None:
 
 
 def test_crown_input_bounds() -> None:
-    path = _CROWN / "discrete" / "liveness" / "liveness_contracts.json"
+    path = _CONTRACTS / "discrete" / "liveness" / "liveness_contracts.json"
     contract = AcasLivenessContract.load_json(path)[0]
     lower, upper = contract.crown_input_bounds()
     assert lower == contract.nn_input_lower

@@ -7,9 +7,9 @@ AcasSafetyContract   -- NN must NOT select forbidden_advisory (never_selects)
 AcasLivenessContract -- NN must select required_advisory (always_selects / equals)
 
 Specs live in separate JSON files (do not mix kinds in one list):
-  contracts/crown/discrete/safety/safety_full_contracts.json
-  contracts/crown/discrete/safety/safety_corridor_contracts.json
-  contracts/crown/discrete/liveness/liveness_contracts.json
+  contracts/discrete/safety/safety_full_contracts.json
+  contracts/discrete/safety/safety_corridor_contracts.json
+  contracts/discrete/liveness/liveness_contracts.json
 
 Pure data + serialization. One instance = one JSON object under "contracts".
 CROWN execution stays on AcasSafetyContractVerifier.

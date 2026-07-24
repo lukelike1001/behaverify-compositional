@@ -136,7 +136,7 @@ def _contract_html_table(rows: list[tuple[str, str]]) -> str:
 
 _ALL_CONTRACTS: list[dict] = []
 _SPECS_PATH: Path = (
-    _ROOT / "contracts/crown/discrete/safety/safety_full_contracts.json"
+    _ROOT / "contracts/discrete/safety/safety_full_contracts.json"
 )
 
 
@@ -861,7 +861,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--specs", type=Path, default=_SPECS_PATH,
-        help="Path to contract specs JSON (default: contracts/crown/discrete/safety/safety_full_contracts.json)",
+        help="Path to contract specs JSON (default: contracts/discrete/safety/safety_full_contracts.json)",
     )
     parser.add_argument(
         "--port", type=int, default=7860,

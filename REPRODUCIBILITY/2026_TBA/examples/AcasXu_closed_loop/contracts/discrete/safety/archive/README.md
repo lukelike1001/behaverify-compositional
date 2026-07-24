@@ -6,5 +6,5 @@ pipeline: current work uses corridor safety + liveness pins and kernel/reachabil
 arguments instead of replaying this batch.
 
 Regenerable in principle via `acas_safety_contract_verifier.py --discrete` over
-`contracts/crown/discrete/safety/safety_full_contracts.json` (slow).
+`contracts/discrete/safety/safety_full_contracts.json` (slow).
 )

@@ -12,7 +12,7 @@ Usage (from AcasXu_closed_loop/):
 
     python3 acas_contract_reachability_classifier.py
     python3 acas_contract_reachability_classifier.py \\
-        --contracts-dir contracts/crown/discrete/safety/archive \\
+        --contracts-dir contracts/discrete/safety/archive \\
         --report-path results/discrete/safety/contract_reachability_report.json
 """
 
@@ -29,7 +29,7 @@ from core.acas_reachability import AcasReachableSet
 from core.paths import EXAMPLE_ROOT
 
 _DEFAULT_CONTRACTS_DIR = (
-    EXAMPLE_ROOT / "contracts/crown/discrete/safety/archive"
+    EXAMPLE_ROOT / "contracts/discrete/safety/archive"
 )
 _DEFAULT_REPORT_PATH = (
     EXAMPLE_ROOT / "results/discrete/safety/contract_reachability_report.json"

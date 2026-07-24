@@ -37,7 +37,7 @@ _TBA = (EXAMPLE_ROOT / "../..").resolve()
 if str(_TBA) not in sys.path:
     sys.path.insert(0, str(_TBA))
 
-from pipeline.neuro.crown.crown_verifier import CrownVerifier  # noqa: E402
+from pipeline.crown_verifier import CrownVerifier  # noqa: E402
 
 from core.acas_contract import AcasSafetyContract  # noqa: E402
 from core.acas_domain import AcasDomain  # noqa: E402

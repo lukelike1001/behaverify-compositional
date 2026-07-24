@@ -6,23 +6,23 @@
 # Usage (from REPRODUCIBILITY/2026_TBA/examples/AcasXu_closed_loop/):
 #
 #   ./scripts/continuous/run_all_continuous_pipelines.sh                                               # defaults
-#   ./scripts/continuous/run_all_continuous_pipelines.sh contracts/crown/continuous/enabled_pgd/
-#   ./scripts/continuous/run_all_continuous_pipelines.sh contracts/crown/continuous/disabled_pgd/
-#   ./scripts/continuous/run_all_continuous_pipelines.sh contracts/crown/discrete/
+#   ./scripts/continuous/run_all_continuous_pipelines.sh contracts/continuous/enabled_pgd/
+#   ./scripts/continuous/run_all_continuous_pipelines.sh contracts/continuous/disabled_pgd/
+#   ./scripts/continuous/run_all_continuous_pipelines.sh contracts/discrete/
 #
 # Outputs go to:
 #   results/<relative-path-under-crown>/<nn_stem>/pipeline_report.json
 #
-# The output path mirrors the contracts/crown/ structure under results/:
-#   contracts/crown/continuous/enabled_pgd/ -> results/continuous/enabled_pgd/
-#   contracts/crown/discrete/safety/        -> results/discrete/safety/
+# The output path mirrors the contracts/ structure under results/:
+#   contracts/continuous/enabled_pgd/ -> results/continuous/enabled_pgd/
+#   contracts/discrete/safety/        -> results/discrete/safety/
 
 set -euo pipefail
 
-CONTRACTS_DIR="${1:-contracts/crown/continuous/enabled_pgd}"
+CONTRACTS_DIR="${1:-contracts/continuous/enabled_pgd}"
 
-# Strip leading "contracts/crown/" to get the relative subfolder, then mirror under results/
-RELATIVE="${CONTRACTS_DIR#contracts/crown/}"
+# Strip leading "contracts/" to get the relative subfolder, then mirror under results/
+RELATIVE="${CONTRACTS_DIR#contracts/}"
 RELATIVE="${RELATIVE%/}"  # strip trailing slash if present
 OUTPUT_BASE="results/${RELATIVE}"
 
@@ -43,7 +43,7 @@ for CONTRACT_JSON in "${CONTRACTS_DIR}"/*.json; do
 
     # Continuous results JSON + full safety specs (IDs must align).
     python3 scripts/discrete/run_acas_safety_pipeline.py \
-        --specs      contracts/crown/discrete/safety/safety_full_contracts.json \
+        --specs      contracts/discrete/safety/safety_full_contracts.json \
         --results    "${CONTRACT_JSON}" \
         --output     "${OUTPUT}" \
         --skip-contracts \

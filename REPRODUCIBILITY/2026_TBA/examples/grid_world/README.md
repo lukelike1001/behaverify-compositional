@@ -45,8 +45,8 @@ grid_world/
 
 > **Shared pipeline modules** live in `2026_TBA/pipeline/` (not inside `grid_world/`).
 > `run_compositional_pipeline.py` imports from there via a `sys.path` insert.
-> This keeps NN-verifier logic (`pipeline/neuro/crown/`) and symbolic-checker logic
-> (`pipeline/symbolic/nuxmv/`) reusable across both the grid-world and ACAS Xu examples.
+> This keeps NN-verifier logic (`pipeline/crown_verifier.py`) and symbolic-checker logic
+> (`pipeline/nuxmv_verifier.py`) reusable across both the grid-world and ACAS Xu examples.
 
 > **Why compositional has more output folders than monolithic:**
 > Monolithic verification has one configuration — BehaVerify embeds a lookup table, nuXmv checks it.
@@ -81,21 +81,21 @@ python run_compositional_pipeline.py \
     --onnx networks/0995__6_18_0__200_1.onnx \
     --output results/compositional/continuous_goals/disabled_pgd/0995 \
     --skip-contracts \
-    --contracts contracts/crown/continuous_goals/disabled_pgd/0995__6_18_0__200_1.json
+    --contracts contracts/continuous_goals/disabled_pgd/0995__6_18_0__200_1.json
 
 # 100%-accurate network, BaB-only contracts -- expect INVAR=false (UNSAT contracts)
 python run_compositional_pipeline.py \
     --onnx networks/1000__6_18_0__0100_1.onnx \
     --output results/compositional/continuous_goals/disabled_pgd/1000__0100 \
     --skip-contracts \
-    --contracts contracts/crown/continuous_goals/disabled_pgd/1000__6_18_0__0100_1.json
+    --contracts contracts/continuous_goals/disabled_pgd/1000__6_18_0__0100_1.json
 
 # 100%-accurate network, PGD contracts -- expect INVAR=false (genuine UNSAT)
 python run_compositional_pipeline.py \
     --onnx networks/1000__6_18_0__0100_1.onnx \
     --output results/compositional/continuous_goals/enabled_pgd/1000__0100 \
     --skip-contracts \
-    --contracts contracts/crown/continuous_goals/enabled_pgd/1000__6_18_0__0100_1_pgd60.json
+    --contracts contracts/continuous_goals/enabled_pgd/1000__6_18_0__0100_1_pgd60.json
 ```
 
 Each run produces a `pipeline_report.json` in the output directory with per-step
@@ -110,7 +110,7 @@ driven by `GridWorldContractVerifier`:
 ```bash
 python grid_world_contract_verifier.py \
     --onnx networks/1000__6_18_0__0100_1.onnx \
-    --output contracts/crown/continuous_goals/enabled_pgd/1000__6_18_0__0100_1_pgd60.json
+    --output contracts/continuous_goals/enabled_pgd/1000__6_18_0__0100_1_pgd60.json
 ```
 
 Other modes:
@@ -119,12 +119,12 @@ Other modes:
 # BaB only (no PGD)
 python grid_world_contract_verifier.py --no-pgd \
     --onnx networks/1000__6_18_0__0100_1.onnx \
-    --output contracts/crown/continuous_goals/disabled_pgd/1000__6_18_0__0100_1.json
+    --output contracts/continuous_goals/disabled_pgd/1000__6_18_0__0100_1.json
 
 # Discrete integer goals (replicates 2025_NEUS-style point checks)
 python grid_world_contract_verifier.py --discrete \
     --onnx networks/1000__6_18_0__0100_1.onnx \
-    --output contracts/crown/discrete_goals/1000__6_18_0__0100_1_discrete.json
+    --output contracts/discrete_goals/1000__6_18_0__0100_1_discrete.json
 ```
 
 > The `_pgd60` suffix is a naming convention matching `timeout_sec: 60` in
@@ -136,7 +136,7 @@ Then run the pipeline:
 python run_compositional_pipeline.py \
     --onnx networks/1000__6_18_0__0100_1.onnx \
     --output results/compositional/continuous_goals/enabled_pgd/1000__0100 \
-    --contracts contracts/crown/continuous_goals/enabled_pgd/1000__6_18_0__0100_1_pgd60.json
+    --contracts contracts/continuous_goals/enabled_pgd/1000__6_18_0__0100_1_pgd60.json
 ```
 
 Kernel / hover checks (no CROWN, no ONNX):

@@ -18,7 +18,7 @@ Run from examples/grid_world/:
 
     python3 grid_world_contract_verifier.py \\
         --onnx networks/1000__6_18_0__0100_1.onnx \\
-        --output contracts/crown/continuous_goals/enabled_pgd/out.json
+        --output contracts/continuous_goals/enabled_pgd/out.json
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ _TBA = (_HERE / "../../").resolve()
 if str(_TBA) not in sys.path:
     sys.path.insert(0, str(_TBA))
 
-from pipeline.neuro.crown.crown_verifier import CrownVerifier  # noqa: E402
+from pipeline.crown_verifier import CrownVerifier  # noqa: E402
 from pipeline.process_memory import ProcessMemory  # noqa: E402
 
 from grid_world_viability import (  # noqa: E402

@@ -31,11 +31,11 @@ _TBA = (_EXAMPLE / "../..").resolve()
 
 DEFAULT_NUXMV = _TBA / "nuXmv_DL/bin/nuXmv"
 DEFAULT_CORRIDOR_SPECS = (
-    _EXAMPLE / "contracts/crown/discrete/safety/safety_corridor_contracts.json"
+    _EXAMPLE / "contracts/discrete/safety/safety_corridor_contracts.json"
 )
 DEFAULT_CORRIDOR_RESULTS = (
     _EXAMPLE
-    / "contracts/crown/discrete/safety/safety_corridor_contract_results.json"
+    / "contracts/discrete/safety/safety_corridor_contract_results.json"
 )
 DEFAULT_OUTPUT = _EXAMPLE / "results/discrete/safety/corridor"
 
