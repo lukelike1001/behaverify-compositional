@@ -17,45 +17,29 @@ Usage (from AcasXu_closed_loop/):
 
 import argparse
 import json
-import math
 import sys
 from pathlib import Path
 
 import gradio as gr
 import plotly.graph_objects as go
-import yaml
 
 # ---------------------------------------------------------------------------
-# Reach generate_acas_contracts.py (3 hops up from this script's location)
+# Paths: image_scripts/ (this file + shared viz) and AcasXu_closed_loop/
 # ---------------------------------------------------------------------------
 
-_ROOT = Path(__file__).parent.parent.parent   # AcasXu_closed_loop/
+_SCRIPTS = Path(__file__).resolve().parent
+_ROOT = _SCRIPTS.parent.parent   # AcasXu_closed_loop/
+sys.path.insert(0, str(_SCRIPTS))
 sys.path.insert(0, str(_ROOT))
-from generate_acas_contracts import ADVISORIES, compute_distance, compute_nn_inputs  # noqa: E402
-from acas_viability import SUCC, compute_viability_kernel, is_safe  # noqa: E402
-from acas_reachability import compute_reachable_states, reachable_physical_by_aprev  # noqa: E402
 
-# ---------------------------------------------------------------------------
-# Model parameters
-# ---------------------------------------------------------------------------
+from acas_visualization_common import AcasVisualizerCommon  # noqa: E402
+from core.acas_domain import AcasDomain  # noqa: E402
+from core.acas_viability import AcasViabilityKernel  # noqa: E402
+from core.acas_reachability import AcasReachableSet  # noqa: E402
 
-def _load_params() -> dict:
-    with open(_ROOT / "acas_model_params.yaml", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-_P = _load_params()
-
-DISTANCE_MODIFIER = _P["physics"]["distance_modifier"]
-MAX_DIST_VAR      = _P["physics"]["max_dist"] // _P["physics"]["distance_modifier"]
-SAFETY_THRESHOLD  = _P["physics"]["safety_threshold"]
-DEGREE_MULTIPLIER = _P["physics"]["degree_multiplier"]
-# Cell-space danger-zone radius: NOT the naive SAFETY_THRESHOLD/DISTANCE_MODIFIER (2.0).
-# compute_distance() rounds before comparing to SAFETY_THRESHOLD, so a state is actually
-# dangerous iff round(sqrt(xm^2+ym^2)) * DISTANCE_MODIFIER < SAFETY_THRESHOLD, i.e.
-# sqrt(xm^2+ym^2) < SAFETY_THRESHOLD/DISTANCE_MODIFIER - 0.5. Do not "fix" this back to
-# SAFETY_THRESHOLD/DISTANCE_MODIFIER -- that would draw a geometrically larger circle that
-# no longer matches which grid cells the discrete rule actually classifies as dangerous.
-SAFETY_RADIUS     = SAFETY_THRESHOLD / DISTANCE_MODIFIER - 0.5
+# Shared plane viz (params, labels, Plotly helpers). Construct once at startup.
+VIZ = AcasVisualizerCommon(_ROOT)
+DOMAIN = AcasDomain.from_yaml()
 
 # ---------------------------------------------------------------------------
 # Reachability / viability data (computed once at startup -- see acas_viability.py
@@ -63,33 +47,21 @@ SAFETY_RADIUS     = SAFETY_THRESHOLD / DISTANCE_MODIFIER - 0.5
 # sub-second, so no JSON caching needed here).
 # ---------------------------------------------------------------------------
 
-_KERNEL = compute_viability_kernel()
-_R_BY_APREV = reachable_physical_by_aprev(compute_reachable_states())
+_KERNEL = AcasViabilityKernel.compute(DOMAIN)
+_SUCC = _KERNEL.successors
+_ADVISORIES = list(DOMAIN.advisories)
+_R_BY_APREV = AcasReachableSet.compute(DOMAIN).physical_by_aprev()
 
 # Ground-truth trajectory: precomputed by acas_lasso_trajectory.py --dump, since it
 # requires onnxruntime + real inference -- a heavier dependency than the rest of this
 # app needs. Loaded as plain JSON; empty list (feature quietly unavailable) if missing.
-_LASSO_PATH = _ROOT / "acas_lasso_trajectory.json"
+_LASSO_PATH = _ROOT / "core" / "liveness" / "acas_lasso_trajectory.json"
 if _LASSO_PATH.exists():
     with open(_LASSO_PATH, encoding="utf-8") as f:
         _LASSO_STATES = [(tuple(s), a) for s, a in json.load(f)]
 else:
     _LASSO_STATES = []
 
-ADVISORY_LABELS = {
-    "clear":        "Clear (CoC)",
-    "weak_left":    "Weak Left",
-    "weak_right":   "Weak Right",
-    "strong_left":  "Strong Left",
-    "strong_right": "Strong Right",
-}
-
-QUADRANT_LABELS = {
-    "(+,+)": (1,  1),
-    "(+,−)": (1, -1),
-    "(−,+)": (-1,  1),
-    "(−,−)": (-1, -1),
-}
 
 # Hover tooltip text shown in the contract details HTML table.
 _FIELD_TOOLTIPS: dict[str, str] = {
@@ -164,7 +136,7 @@ def _contract_html_table(rows: list[tuple[str, str]]) -> str:
 
 _ALL_CONTRACTS: list[dict] = []
 _SPECS_PATH: Path = (
-    _ROOT / "contracts/crown/continuous_goals/contract_specs_eps1e4.json"
+    _ROOT / "contracts/crown/discrete/safety/safety_full_contracts.json"
 )
 
 
@@ -179,7 +151,7 @@ def _nn_pts(contract: dict) -> list[tuple[float, float]]:
     hv = contract["heading_own_var"]
     result = []
     for xm, ym in contract["dangerous_xy"]:
-        inp = compute_nn_inputs(xm, ym, xs, ys, hv)
+        inp = DOMAIN.compute_nn_inputs(xm, ym, xs, ys, hv)
         result.append((inp[0], inp[1]))
     return result
 
@@ -190,18 +162,18 @@ def _nn_pts(contract: dict) -> list[tuple[float, float]]:
 
 def _heading_choices() -> list[str]:
     headings = sorted({c["heading_own_var"] for c in _ALL_CONTRACTS})
-    return ["All"] + [f"{h}  ({h * DEGREE_MULTIPLIER}°)" for h in headings]
+    return ["All"] + [f"{h}  ({h * VIZ.degree_multiplier}°)" for h in headings]
 
 
 def _advisory_choices() -> list[str]:
     advs = sorted({c["forbidden_advisory"] for c in _ALL_CONTRACTS})
-    return ["All"] + [ADVISORY_LABELS[a] for a in advs]
+    return ["All"] + [VIZ.ADVISORY_LABELS[a] for a in advs]
 
 
 def _label_to_advisory(label: str) -> str | None:
     if label == "All":
         return None
-    return next(k for k, v in ADVISORY_LABELS.items() if v == label)
+    return next(k for k, v in VIZ.ADVISORY_LABELS.items() if v == label)
 
 
 def filter_and_list(
@@ -212,7 +184,7 @@ def filter_and_list(
     aprev_label: str,
 ) -> tuple[list[str], str]:
     """Return filtered contract dropdown choices and a default selection."""
-    q      = QUADRANT_LABELS.get(quadrant_label)
+    q      = VIZ.QUADRANT_LABELS.get(quadrant_label)
     adv    = _label_to_advisory(advisory_label)
     a_prev = _label_to_advisory(aprev_label)  # same label<->key map as forbidden_advisory
 
@@ -271,65 +243,68 @@ def _viability_category(xm: int, ym: int, x_sign: int, y_sign: int, heading_own_
 def _walk_to_unsafe(
     seed: tuple[int, int, int, int, int], max_steps: int = 200,
 ) -> list[tuple[int, int, int, int, int]]:
-    """From a safe_but_doomed (or any safe) seed state, deterministically walk via SUCC
-    until is_safe() is False. At each step, prefer the first advisory (in ADVISORIES
-    order) whose successor hasn't been visited yet, else ADVISORIES[0] -- purely to
-    avoid a cosmetically-repetitive trace before it terminates.
+    """From a safe_but_doomed (or any safe) seed state, deterministically walk via
+    kernel successors until plant safety fails. At each step, prefer the first
+    advisory (in domain advisory order) whose successor hasn't been visited yet,
+    else the first advisory -- purely to avoid a cosmetically-repetitive trace.
 
     Termination is mathematically guaranteed for a safe_but_doomed seed, not just
-    likely: compute_viability_kernel()'s fixpoint removes doomed states in rounds, and
-    a state removed in round k has every advisory leading either directly to Unsafe or
-    to a state removed in an earlier round -- so ANY fixed deterministic choice reaches
-    Unsafe within a bounded number of steps. max_steps is defensive-only, not required
-    by the math.
+    likely: AcasViabilityKernel.compute's fixpoint removes doomed states in rounds,
+    and a state removed in round k has every advisory leading either directly to
+    Unsafe or to a state removed in an earlier round -- so ANY fixed deterministic
+    choice reaches Unsafe within a bounded number of steps. max_steps is
+    defensive-only, not required by the math.
 
     Returns the state sequence ending at the first Unsafe state reached (inclusive)."""
     state = seed
     seen = {state}
     trace = [state]
     for _ in range(max_steps):
-        if not is_safe(state):
+        if not _KERNEL.is_plant_safe(state):
             return trace
-        chosen = next((a for a in ADVISORIES if SUCC[state][a] not in seen), ADVISORIES[0])
-        state = SUCC[state][chosen]
+        chosen = next(
+            (a for a in _ADVISORIES if _SUCC[state][a] not in seen),
+            _ADVISORIES[0],
+        )
+        state = _SUCC[state][chosen]
         trace.append(state)
         seen.add(state)
     return trace
 
 
 def _unsafe_detail_html(xm: int, ym: int) -> str:
-    rho = compute_distance(xm, ym)
+    rho = DOMAIN.compute_distance(xm, ym)
     return _contract_html_table([
         ("Category", "Unsafe"),
         ("ρ (distance)", f"{rho} ft"),
-        ("Verdict", f"ρ = {rho} ft &lt; {SAFETY_THRESHOLD} ft -- violates the safety invariant."),
+        ("Verdict", f"ρ = {rho} ft &lt; {VIZ.safety_threshold} ft -- violates the safety invariant."),
     ])
 
 
 def _interior_detail_html(xm: int, ym: int) -> str:
-    rho = compute_distance(xm, ym)
+    rho = DOMAIN.compute_distance(xm, ym)
     return _contract_html_table([
         ("Category", "Interior"),
         ("ρ (distance)", f"{rho} ft"),
-        ("Verdict", f"ρ = {rho} ft &gt;= {SAFETY_THRESHOLD} ft. All 5 advisories keep this "
+        ("Verdict", f"ρ = {rho} ft &gt;= {VIZ.safety_threshold} ft. All 5 advisories keep this "
                     "state inside the viability kernel V."),
     ])
 
 
 def _boundary_detail_html(state: tuple[int, int, int, int, int]) -> str:
     xm, ym = state[0], state[1]
-    rho = compute_distance(xm, ym)
+    rho = DOMAIN.compute_distance(xm, ym)
     allowed = _KERNEL.allowed[state]
-    bad = next(a for a in ADVISORIES if a not in allowed)
-    nxt = SUCC[state][bad]
-    nxt_rho = compute_distance(nxt[0], nxt[1])
+    bad = next(a for a in _ADVISORIES if a not in allowed)
+    nxt = _SUCC[state][bad]
+    nxt_rho = DOMAIN.compute_distance(nxt[0], nxt[1])
     nxt_cat = _viability_category(nxt[0], nxt[1], nxt[2], nxt[3], nxt[4])
     return _contract_html_table([
         ("Category", "Boundary"),
         ("ρ (distance)", f"{rho} ft -- safe right now"),
-        ("A choice that exits V", f"{ADVISORY_LABELS[bad]} &rarr; ({nxt[0]},{nxt[1]}), "
+        ("A choice that exits V", f"{VIZ.ADVISORY_LABELS[bad]} &rarr; ({nxt[0]},{nxt[1]}), "
                                    f"ρ={nxt_rho} ft ({nxt_cat})"),
-        ("Choices that stay safe forever", ", ".join(ADVISORY_LABELS[a] for a in allowed)),
+        ("Choices that stay safe forever", ", ".join(VIZ.ADVISORY_LABELS[a] for a in allowed)),
     ])
 
 
@@ -339,8 +314,8 @@ def _safe_but_doomed_detail_html(state: tuple[int, int, int, int, int]) -> str:
             ("Verdict", "Safe right now, but every advisory sequence eventually reaches "
                         "Unsafe. One example trace:")]
     for i, s in enumerate(trace):
-        rho = compute_distance(s[0], s[1])
-        tag = "Unsafe" if not is_safe(s) else "safe"
+        rho = DOMAIN.compute_distance(s[0], s[1])
+        tag = "Unsafe" if not _KERNEL.is_plant_safe(s) else "safe"
         rows.append((f"Step {i}", f"({s[0]},{s[1]}) heading_var={s[4]} -- ρ={rho} ft ({tag})"))
     return _contract_html_table(rows)
 
@@ -356,14 +331,6 @@ def _cell_detail_html(xm: int, ym: int, x_sign: int, y_sign: int, heading_own_va
     if category == "boundary":
         return _boundary_detail_html(state)
     return _safe_but_doomed_detail_html(state)
-
-
-def _legend_marker(fig: go.Figure, color: str, name: str, symbol: str = "square", size: int = 12) -> None:
-    """Add an invisible marker purely to create a legend entry -- neither go.Heatmap
-    nor fig.add_shape() produce one on their own in Plotly."""
-    fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers",
-                              marker=dict(symbol=symbol, size=size, color=color),
-                              name=name, showlegend=True, hoverinfo="skip"))
 
 
 def _region_boundary_segments(
@@ -387,20 +354,6 @@ def _region_boundary_segments(
             if neighbor not in cells:
                 segments.append((x_sign * mx0, y_sign * my0, x_sign * mx1, y_sign * my1))
     return segments
-
-
-def _panel1_axis_range(
-    x_sign: int, y_sign: int, lim: float, arrow_tip: tuple[float, float],
-) -> tuple[float, float, float, float]:
-    """(x0, x1, y0, y1): the union of the active quadrant's box and a padded box around
-    the heading-arrow tip, so zooming in to make the grid legible never clips the arrow.
-    The Viability heatmap is always shown, so this zoom is always applied."""
-    qx0, qx1 = (0.0, lim) if x_sign == 1 else (-lim, 0.0)
-    qy0, qy1 = (0.0, lim) if y_sign == 1 else (-lim, 0.0)
-    adx, ady = arrow_tip
-    pad = 0.5
-    return (min(qx0, adx - pad), max(qx1, adx + pad),
-            min(qy0, ady - pad), max(qy1, ady + pad))
 
 
 def _draw_physical_original(
@@ -432,17 +385,15 @@ def _draw_physical_original(
     Heading convention (matches the BehaVerify DSL):
       0° = East (+x), angles increase counter-clockwise.
     """
-    heading_deg = heading_own_var * DEGREE_MULTIPLIER
-    heading_rad = math.radians(heading_deg)
-    lim = MAX_DIST_VAR + 0.5
+    heading_deg = VIZ.heading_degrees(heading_own_var)
+    lim = VIZ.max_dist_var + 0.5
 
     fig = go.Figure()
-    fig.add_hline(y=0, line=dict(color="#aaaaaa", width=0.8))
-    fig.add_vline(x=0, line=dict(color="#aaaaaa", width=0.8))
+    VIZ.add_coordinate_axes(fig)
 
     # --- Viability fill (go.Heatmap, one trace for the whole grid) -- always shown ---
-    xs_mag = list(range(MAX_DIST_VAR + 1))
-    ys_mag = list(range(MAX_DIST_VAR + 1))
+    xs_mag = list(range(VIZ.max_dist_var + 1))
+    ys_mag = list(range(VIZ.max_dist_var + 1))
     cat_idx = {name: i for i, name in enumerate(_VIABILITY_ORDER)}
 
     def _category(xm, ym):
@@ -475,7 +426,7 @@ def _draw_physical_original(
         hoverinfo="skip",
     ))
     for name in _VIABILITY_ORDER:
-        _legend_marker(fig, _VIABILITY_COLORS[name], name.replace("_", " ").title())
+        VIZ.add_legend_marker(fig, _VIABILITY_COLORS[name], name.replace("_", " ").title())
 
     # --- Reachability outline (perimeter of the reachable region, not a fill) ---
     if reachability_choice != "Off":
@@ -500,28 +451,14 @@ def _draw_physical_original(
     fig.add_shape(type="rect", x0=qx0, y0=qy0, x1=qx0 + lim, y1=qy0 + lim,
                   fillcolor="#fff9c4", opacity=0.55,
                   line=dict(color="#f39c12", width=1.5), layer="below")
-    _legend_marker(fig, "#fff9c4", "Contract quadrant")
+    VIZ.add_legend_marker(fig, "#fff9c4", "Contract quadrant")
 
-    # --- Danger-zone boundary (rho < SAFETY_THRESHOLD) -- outline only, not filled: the
-    # invariant is rho >= SAFETY_THRESHOLD (safe); this circle shows where it's VIOLATED,
-    # so it must not be labeled/colored like the invariant itself or like a real "region"
-    # duplicating the Viability overlay's own (exact, per-cell) Unsafe category.
-    radius = SAFETY_RADIUS
-    fig.add_shape(type="circle", x0=-radius, y0=-radius, x1=radius, y1=radius,
-                  line=dict(color="#555555", width=1.5, dash="dash"))
-    _legend_marker(fig, "#555555", f"Danger zone (ρ < {SAFETY_THRESHOLD} ft)", symbol="circle")
+    # Danger-zone outline only (not filled): invariant is rho >= safety_threshold;
+    # circle shows where it is violated (matches discrete round(sqrt) cells).
+    VIZ.add_danger_zone_circle(fig)
 
-    # --- Ownship + heading arrow ---
-    fig.add_trace(go.Scatter(x=[0], y=[0], mode="markers",
-                              marker=dict(size=11, color="#2471a3"), name="Ownship (origin)"))
-
-    arrow_len = MAX_DIST_VAR * 0.22
-    adx = math.cos(heading_rad) * arrow_len
-    ady = math.sin(heading_rad) * arrow_len
-    fig.add_annotation(x=adx, y=ady, ax=0, ay=0, axref="x", ayref="y",
-                        showarrow=True, arrowhead=2, arrowwidth=4, arrowcolor="#2471a3")
-    fig.add_annotation(x=adx * 1.12, y=ady * 1.12, text=f"{heading_deg}°",
-                        showarrow=False, font=dict(size=15, color="#2471a3"))
+    # Ownship + heading arrow
+    adx, ady = VIZ.add_ownship_and_heading_arrow(fig, heading_own_var)
 
     # --- B_R = boundary(V) ∩ R(a_prev) highlight ---
     if highlight_br:
@@ -552,16 +489,21 @@ def _draw_physical_original(
 
     sign_x = "+" if x_sign == 1 else "−"
     sign_y = "+" if y_sign == 1 else "−"
-    x0, x1, y0, y1 = _panel1_axis_range(x_sign, y_sign, lim, (adx, ady))
-    title_forbid = f"<br>forbidden: {ADVISORY_LABELS[contract['forbidden_advisory']]}" if contract is not None else ""
-    fig.update_xaxes(range=[x0, x1], title="x (× 100 ft, signed)")
-    fig.update_yaxes(range=[y0, y1], title="y (× 100 ft, signed)", scaleanchor="x", scaleratio=1)
-    fig.update_layout(
-        plot_bgcolor="#eaf4fb",
-        title=dict(text=(f"Original physical space<br>"
-                          f"ownship heading={heading_deg}°  quad=({sign_x},{sign_y}){title_forbid}"), font=dict(size=13)),
-        legend=dict(x=1.02, y=1, xanchor="left", font=dict(size=10)),
-        margin=dict(t=70, r=10, b=40, l=60),
+    x0, x1, y0, y1 = VIZ.panel_axis_range_for_quadrant(
+        x_sign, y_sign, lim, (adx, ady),
+    )
+    title_forbid = (
+        f"<br>forbidden: {VIZ.ADVISORY_LABELS[contract['forbidden_advisory']]}"
+        if contract is not None else ""
+    )
+    VIZ.apply_physical_plane_layout(
+        fig,
+        x_range=(x0, x1),
+        y_range=(y0, y1),
+        title=(
+            f"Original physical space<br>"
+            f"ownship heading={heading_deg}°  quad=({sign_x},{sign_y}){title_forbid}"
+        ),
     )
     return fig
 
@@ -601,7 +543,7 @@ def _draw_nn_space(
         fig.add_shape(type="rect", x0=bx0, y0=by0, x1=bx1, y1=by1,
                       fillcolor="#d6eaf8", opacity=0.55 if mode == "Both" else 0.65,
                       line=dict(color="#2e86c1", width=2.0))
-        _legend_marker(fig, "#d6eaf8", f"CROWN bounding box  (eps={eps:.0e})")
+        VIZ.add_legend_marker(fig, "#d6eaf8", f"CROWN bounding box  (eps={eps:.0e})")
         fig.add_trace(go.Scatter(x=[bx0, bx1], y=[by0, by1], mode="markers",
                                   marker=dict(symbol="x", size=10, color="#2e86c1", line=dict(width=1.5)),
                                   showlegend=False, hoverinfo="skip"))
@@ -610,7 +552,7 @@ def _draw_nn_space(
         fig.add_shape(type="rect", x0=bx0, y0=by0, x1=bx1, y1=by1,
                       fillcolor="#d6eaf8", opacity=0.10,
                       line=dict(color="#2e86c1", width=1.5, dash="dash"))
-        _legend_marker(fig, "#d6eaf8", "Continuous box (reference)")
+        VIZ.add_legend_marker(fig, "#d6eaf8", "Continuous box (reference)")
 
     if mode in ("Discrete", "Both"):
         n = contract["n_states_covered"]
@@ -654,21 +596,11 @@ def _draw_nn_space(
 # Main render function (called by Gradio)
 # ---------------------------------------------------------------------------
 
-def _empty_fig(msg: str = "") -> go.Figure:
-    fig = go.Figure()
-    if msg:
-        fig.add_annotation(xref="paper", yref="paper", x=0.5, y=0.5, text=msg,
-                            showarrow=False, font=dict(size=13))
-    fig.update_xaxes(visible=False)
-    fig.update_yaxes(visible=False)
-    return fig
-
-
 def _slice_membership(region: frozenset, x_sign: int, y_sign: int, heading_own_var: int) -> int:
     """Count of (x_mag, y_mag) grid cells in `region` (a frozenset of physical 5-tuples)
     matching this slice. Shared by the panel-1 heatmap and the region-info readout."""
     return sum(
-        1 for xm in range(MAX_DIST_VAR + 1) for ym in range(MAX_DIST_VAR + 1)
+        1 for xm in range(VIZ.max_dist_var + 1) for ym in range(VIZ.max_dist_var + 1)
         if (xm, ym, x_sign, y_sign, heading_own_var) in region
     )
 
@@ -680,11 +612,11 @@ def _current_slice(contract_choice: str, heading_var, quadrant_label: str) -> tu
     contract = _contract_from_choice(contract_choice)
     if contract is not None:
         return contract["heading_own_var"], contract["x_sign"], contract["y_sign"]
-    x_sign, y_sign = QUADRANT_LABELS.get(quadrant_label, (1, 1))  # "All" -> (+,+)
+    x_sign, y_sign = VIZ.QUADRANT_LABELS.get(quadrant_label, (1, 1))  # "All" -> (+,+)
     return int(heading_var), x_sign, y_sign
 
 
-_CELL_DETAIL_PLACEHOLDER = f"Enter x_mag/y_mag (0-{MAX_DIST_VAR}) above and click Inspect."
+_CELL_DETAIL_PLACEHOLDER = f"Enter x_mag/y_mag (0-{VIZ.max_dist_var}) above and click Inspect."
 
 
 def render(
@@ -729,11 +661,11 @@ def render(
     region_html = _contract_html_table(region_rows)
 
     if contract is None:
-        empty = _empty_fig("No contract selected.")
+        empty = VIZ.empty_figure("No contract selected.")
         return fig_orig, empty, "", region_html, _CELL_DETAIL_PLACEHOLDER
 
     pts = _nn_pts(contract)
-    heading_deg = contract["heading_own_var"] * DEGREE_MULTIPLIER
+    heading_deg = VIZ.heading_degrees(contract["heading_own_var"])
     sign_x = "+" if contract["x_sign"] == 1 else "−"
     sign_y = "+" if contract["y_sign"] == 1 else "−"
 
@@ -746,7 +678,7 @@ def render(
         ("Contract id",          str(contract["id"])),
         ("heading_own_var",      f"{contract['heading_own_var']} ({heading_deg}°)"),
         ("Quadrant",             f"({sign_x}, {sign_y})"),
-        ("Forbidden advisory",   ADVISORY_LABELS[contract["forbidden_advisory"]]),
+        ("Forbidden advisory",   VIZ.ADVISORY_LABELS[contract["forbidden_advisory"]]),
         ("n_states_covered",     str(contract["n_states_covered"])),
         ("Bounding box dim 1",   f"[{lower[0]:.4f}, {upper[0]:.4f}]"),
         ("Bounding box dim 2",   f"[{lower[1]:.4f}, {upper[1]:.4f}]"),
@@ -766,8 +698,8 @@ def on_xy_select(x_mag, y_mag, heading_var, quadrant_label, aprev_label, contrac
     if x_mag is None or y_mag is None:
         return "Enter both x_mag and y_mag."
     xm, ym = int(round(x_mag)), int(round(y_mag))
-    if not (0 <= xm <= MAX_DIST_VAR) or not (0 <= ym <= MAX_DIST_VAR):
-        return f"x_mag and y_mag must both be in [0, {MAX_DIST_VAR}]."
+    if not (0 <= xm <= VIZ.max_dist_var) or not (0 <= ym <= VIZ.max_dist_var):
+        return f"x_mag and y_mag must both be in [0, {VIZ.max_dist_var}]."
     slice_heading, x_sign, y_sign = _current_slice(contract_choice, heading_var, quadrant_label)
     return _cell_detail_html(xm, ym, x_sign, y_sign, slice_heading)
 
@@ -777,7 +709,7 @@ def on_xy_select(x_mag, y_mag, heading_var, quadrant_label, aprev_label, contrac
 
 def build_ui() -> gr.Blocks:
     advisory_choices = _advisory_choices()
-    quadrant_choices = ["All"] + list(QUADRANT_LABELS.keys())
+    quadrant_choices = ["All"] + list(VIZ.QUADRANT_LABELS.keys())
 
     # Pick a default heading_var that has at least one contract with >= 5 states
     default_heading = next(
@@ -808,14 +740,14 @@ def build_ui() -> gr.Blocks:
                     minimum=0, maximum=max_heading, step=1,
                     value=default_heading,
                     label="Heading (var)",
-                    info=f"heading_own_var × {DEGREE_MULTIPLIER}° = actual heading")
+                    info=f"heading_own_var × {VIZ.degree_multiplier}° = actual heading")
                 quadrant_dd = gr.Dropdown(
                     quadrant_choices, value="All", label="Quadrant")
                 advisory_dd = gr.Dropdown(
                     advisory_choices, value="All", label="Forbidden advisory")
                 aprev_dd = gr.Dropdown(
-                    ["All"] + [ADVISORY_LABELS[a] for a in ADVISORIES],
-                    value=ADVISORY_LABELS["clear"], label="a_prev (active network)",
+                    ["All"] + [VIZ.ADVISORY_LABELS[a] for a in _ADVISORIES],
+                    value=VIZ.ADVISORY_LABELS["clear"], label="a_prev (active network)",
                     info="Also drives the Reachability overlay and B_R highlight below")
                 min_states_sl = gr.Slider(
                     1, 20, value=1, step=1, label="Min states covered")
@@ -855,16 +787,16 @@ def build_ui() -> gr.Blocks:
                     with gr.Column(min_width=260):
                         gr.Markdown("#### Inspect a cell")
                         gr.Markdown(
-                            f"*Enter magnitudes in [0, {MAX_DIST_VAR}]; sign/heading "
+                            f"*Enter magnitudes in [0, {VIZ.max_dist_var}]; sign/heading "
                             "come from the filters at left.*",
                             elem_classes=["hint-text"],
                         )
                         with gr.Row():
                             x_mag_in = gr.Number(
-                                value=0, minimum=0, maximum=MAX_DIST_VAR, step=1,
+                                value=0, minimum=0, maximum=VIZ.max_dist_var, step=1,
                                 precision=0, label="x_mag")
                             y_mag_in = gr.Number(
-                                value=0, minimum=0, maximum=MAX_DIST_VAR, step=1,
+                                value=0, minimum=0, maximum=VIZ.max_dist_var, step=1,
                                 precision=0, label="y_mag")
                         inspect_btn = gr.Button("Inspect", size="sm")
                         gr.Markdown("#### Cell Detail")
@@ -929,7 +861,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--specs", type=Path, default=_SPECS_PATH,
-        help="Path to contract specs JSON (default: contracts/crown/continuous_goals/contract_specs_eps1e4.json)",
+        help="Path to contract specs JSON (default: contracts/crown/discrete/safety/safety_full_contracts.json)",
     )
     parser.add_argument(
         "--port", type=int, default=7860,

@@ -131,7 +131,7 @@ python3 figures/image_scripts/acas_contract_explorer.py
 
 | Flag | Default | Description |
 |---|---|---|
-| `--specs` | `contracts/crown/continuous_goals/contract_specs_eps1e4.json` | Contract spec JSON |
+| `--specs` | `contracts/crown/discrete/safety/safety_full_contracts.json` | Contract spec JSON |
 | `--port` | `7860` | Gradio server port |
 | `--share` | *(flag)* | Create a public shareable Gradio link |
 

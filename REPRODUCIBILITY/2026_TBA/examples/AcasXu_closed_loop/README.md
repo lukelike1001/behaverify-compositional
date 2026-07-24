@@ -1,109 +1,115 @@
 # ACAS Xu Closed-Loop Compositional Verification
 
-This directory contains the compositional verification pipeline for a closed-loop,
-5-NN ACAS Xu (Airborne Collision Avoidance System X) Neuro-Symbolic Behavior Tree (NSBT).
+Compositional verification for a closed-loop, 5-NN ACAS Xu Neuro-Symbolic
+Behavior Tree (NSBT). Ownship selects one of five networks from the previous
+advisory (`a_prev`), applies the advisory to heading, and steps the relative
+geometry. The safety invariant is `distance >= 200` (raw units).
 
-The ownship selects one of five neural networks based on the previous advisory
-(`a_prev`), then applies the chosen advisory to update its heading. The safety
-invariant is `distance >= 200` (the aircraft never come within 200 raw units of
-each other).
+Background: *Neuro-Symbolic Behavior Trees and Their Verification*,
+Serbinowska et al., NeuS 2025.
 
-For background, see the NeuS 2025 paper:
-> *Neuro-Symbolic Behavior Trees and Their Verification*, Serbinowska et al., 2025.
+All commands below assume:
+
+```bash
+cd REPRODUCIBILITY/2026_TBA/examples/AcasXu_closed_loop
+```
 
 ---
 
 ## Quick start — interactive contract explorer
 
-Before running any verification, explore the pre-computed A/G contracts
-interactively with the Gradio app. No CROWN or nuXmv needed.
+No CROWN or nuXmv required:
 
 ```bash
-cd REPRODUCIBILITY/2026_TBA/examples/AcasXu_closed_loop
-pip install gradio          # one-time, if not already installed
+pip install gradio   # once, if needed
 python3 figures/image_scripts/acas_contract_explorer.py
-# → open http://localhost:7860
+# → http://localhost:7860
 ```
 
-The app shows a 2×2 dashboard for any selected contract:
-
-| | Left | Right |
-|---|---|---|
-| **Top** | Original physical state space (signed coordinates, heading arrow, quadrant highlight) | Normalized physical state space (ownship at origin) |
-| **Bottom** | NN input space — toggle **Continuous**, **Discrete**, or **Both** modes; drag **eps** slider to grow/shrink the bounding box live | Contract details table (id, heading, quadrant, forbidden advisory, bounding box bounds) |
-
-This is the fastest way to build intuition for what continuous vs. discrete
-contract verification actually checks before reading any of the pipeline scripts.
-See [`figures/README.md`](figures/README.md) for full app documentation.
+See [`figures/README.md`](figures/README.md) for the Gradio app.
 
 ---
 
-## Directory Layout
+## Architecture
+
+Two product lines share the same process (generate → verify → patch → nuXmv)
+with different algorithms:
+
+| Line | Driver | Contracts | CROWN property |
+|------|--------|-----------|----------------|
+| **Safety** | `scripts/discrete/run_acas_safety_pipeline.py` | range A/G (never-selects) | forbidden advisory not selected |
+| **Liveness** | `scripts/discrete/run_acas_liveness_pipeline.py` | equals pins on a lasso trajectory | always-selects required advisory |
+
+Shared plant and tooling live under `core/`. Drivers live under `scripts/`.
+
+```
+tree template  ──AcasTreeGenerator──►  tree/acas_closed_loop.tree
+                                              │
+                                         dsl_to_nuxmv
+                                              ▼
+                               symbolic/smv/acas_closed_loop.smv
+                                              │
+         contracts (JSON) ──AcasSmvContractPatcher──►  patched SMV ──nuXmv──► report
+```
+
+---
+
+## Directory layout
 
 ```
 AcasXu_closed_loop/
-├── networks/                               # 5 ONNX files (see networks/README.md)
-├── contracts/
-│   └── crown/
-│       ├── continuous/                           # frozen continuous CROWN results until after TACAS
-│       │   ├── enabled_pgd/
-│       │   └── disabled_pgd/
-│       └── discrete/
-│           ├── safety/
-│           │   ├── safety_full_contracts.json    # Full safety A/G specs (range)
-│           │   ├── safety_corridor_*.json        # Corridor safety specs/results
-│           │   └── archive/                      # Full-table discrete CROWN results
-│           └── liveness/
-│               ├── liveness_contracts.json       # Equals contracts (52)
-│               └── liveness_contract_results.json
-├── results/
-│   ├── continuous/                         # Continuous compositional outputs (ignore / sparse)
+├── tree/
+│   ├── acas_closed_loop_template.tree   # Template (REPLACE_* tables)
+│   └── acas_closed_loop.tree            # Expanded tree (committed; regenerable)
+├── symbolic/smv/
+│   └── acas_closed_loop.smv             # Base SMV (generated; gitignored)
+├── core/                                # Libraries (import from here)
+│   ├── paths.py                         # EXAMPLE_ROOT anchor
+│   ├── acas_domain.py                   # Plant physics (AcasDomain)
+│   ├── acas_state.py                    # State / augmented state
+│   ├── acas_reachability.py             # Reachability kernel R
+│   ├── acas_viability.py                # Viability kernel V
+│   ├── acas_contract.py                 # Safety / liveness contract types
+│   ├── acas_smv_contract_patcher.py     # Inject SAT contracts into SMV
+│   ├── acas_tree_generator.py           # AcasTreeGenerator
+│   ├── acas_tree_parameter_extractor.py # YAML refresh from template constants
+│   ├── acas_model_params.yaml           # Single source of truth (physics + catalogs)
+│   ├── acas_verifier_params.yaml        # CROWN + SMV variable names
+│   ├── safety/                          # Safety generator / verifier / classifier
+│   └── liveness/                        # Trajectory, config, generator, verifier
+├── scripts/
+│   ├── run_acas_monolithic_pipeline.py  # Baseline (NNs stay in the SMV)
 │   ├── discrete/
-│   │   ├── safety/                         # Corridor, reachability report, discrete safety pipelines
-│   │   └── liveness/                       # Liveness SMV / nuXmv / pipeline reports
-│   └── monolithic/                         # nuXmv output for monolithic runs
-├── symbolic/
-│   └── smv/                               # Generated base SMV (reused via --skip-smv)
-├── figures/                                # Visualization scripts and outputs
-│   ├── image_scripts/
-│   │   └── acas_contract_explorer.py       # Interactive Gradio demo (start here)
-│   └── figures/README.md                   # Figure documentation
-├── tree/                                   # Generated tree file (reused via --skip-tree)
-├── acas_template_360.tree                  # Template for the closed-loop model
-├── generate_acas_tree.py                   # Fills in template → tree/acas_360.tree
-├── acas_domain.py                          # Plant physics (AcasDomain)
-├── acas_safety_contract_generator.py              # Enumerate dangerous states → range contract specs
-├── acas_safety_contract_verifier.py                # Verify contract specs via CROWN (serial)
-├── verify_acas_contracts_parallel.py       # Parallel retry wrapper for TIMEOUT contracts
-├── acas_verifier_params.yaml       # Config for acas_safety_contract_verifier.py
-├── run_acas_compositional_pipeline.py      # End-to-end compositional pipeline (single NN)
-├── run_all_continuous_pipelines.sh         # Batch: run compositional pipeline for all NNs
-├── run_acas_monolithic_pipelines.sh        # Monolithic vs. discrete compositional benchmark
-├── verify_all_continuous_contracts.sh      # Batch: run CROWN for all 5 NNs (continuous)
-├── verify_all_discrete_contracts.sh        # Batch: run CROWN for all 5 NNs (discrete)
-└── retry_all_discrete.sh                   # Retry TIMEOUT discrete contracts via PGD
+│   │   ├── run_acas_safety_pipeline.py  # Safety product line
+│   │   ├── run_acas_liveness_pipeline.py
+│   │   ├── run_acas_corridor_pipeline.py      # Inductive corridor end-to-end
+│   │   └── run_acas_inductive_invariant_check.py
+│   └── continuous/
+│       └── run_all_continuous_pipelines.sh    # Deferred continuous batch
+├── contracts/crown/
+│   ├── continuous/                      # Frozen continuous CROWN results
+│   └── discrete/{safety,liveness}/      # Discrete specs + results (committed)
+├── results/{discrete,monolithic,continuous}/  # Pipeline outputs (gitignored)
+├── networks/                            # 5 ONNX models
+└── figures/                             # Gradio explorer + figure docs
 ```
 
 ---
 
 ## Prerequisites
 
-### 1. BehaVerify + extra dependencies
+### BehaVerify + extras
 
-Install from the repository root, then add the extras for this pipeline:
+From the repository root:
 
 ```bash
 pip install -e .
 pip install -r REPRODUCIBILITY/2026_TBA/requirements.txt
 ```
 
-The extras file currently adds only `gradio` (for the interactive contract explorer).
-Everything else (`matplotlib`, `numpy`, `pandas`, `onnxruntime`, `PyYAML`) is already
-pulled in by the base `behaverify` install.
+### nuXmv 2.1.0
 
-### 2. nuXmv 2.1.0
-
-nuXmv cannot be redistributed. Download and extract into `REPRODUCIBILITY/2026_TBA/`:
+Cannot be redistributed. Place under `REPRODUCIBILITY/2026_TBA/nuXmv_DL/`:
 
 ```bash
 wget "https://nuxmv.fbk.eu/theme/download.php?file=nuXmv-2.1.0-linux64.tar.xz" \
@@ -112,45 +118,26 @@ tar -xf nuXmv_DL.tar.xz --one-top-level=nuXmv_DL --strip-components 1
 chmod +x nuXmv_DL/bin/nuXmv
 ```
 
-The pipeline defaults to `../../nuXmv_DL/bin/nuXmv` relative to this directory.
+Pipelines default to `../../nuXmv_DL/bin/nuXmv` relative to this directory.
 
-### 3. alpha-beta-CROWN (only needed to re-verify contracts)
+### alpha-beta-CROWN (only to re-verify contracts)
 
-Pre-computed contract specs and NN_1 verification results are committed in
-`contracts/`. You only need CROWN to re-run or extend contract verification.
-
-```bash
-cd REPRODUCIBILITY/2026_TBA
-git clone https://github.com/Verified-Intelligence/alpha-beta-CROWN alpha-beta-CROWN
-cd alpha-beta-CROWN
-git checkout 6b8bbcf
-git submodule update --init   # auto_LiRPA -- required, not a pip dependency
-pip install -e auto_LiRPA
-pip install -e .
-cd ..
-```
-
-> **Note:** `pip install -e .` pulls in `torch<2.9.0`, which will **downgrade** an
-> existing newer torch/torchvision install at the user level. If other projects
-> on this machine depend on torch>=2.9, install into a dedicated venv instead
-> of the system/user environment.
+Pre-computed specs and many results are already under `contracts/`. Install CROWN
+only to re-run or extend verification (see NeuS / TBA notes for pin `6b8bbcf`).
 
 ---
 
-## Model Overview
-
-### State variables
+## Model overview
 
 | Variable | Domain | Meaning |
 |---|---|---|
-| `x_mag`, `y_mag` | integers [0, 10] | Position magnitude (× 100 = raw units) |
-| `x_sign`, `y_sign` | {−1, +1} | Position sign (quadrant) |
+| `x_mag`, `y_mag` | integers [0, 10] | Position magnitude (× distance_modifier = raw units) |
+| `x_sign`, `y_sign` | {−1, +1} | Quadrant |
 | `heading_own_var` | integers [0, 39] | Ownship heading index (× 9° = degrees) |
-| `command` (a_prev) | 5 advisories | Previous advisory; selects which NN runs |
+| `command` / `a_prev` | 5 advisories | Selects which NN runs |
 
-`heading_int` is fixed at 225° and speeds are fixed at 20 (own) and 30 (intruder).
-
-### NN selection
+`heading_int` is fixed at 225°; speeds are 20 (own) and 30 (intruder) from
+`core/acas_model_params.yaml`.
 
 ```
 a_prev = clear        → NN_1  (aprev_clear.onnx)
@@ -160,260 +147,173 @@ a_prev = strong_right → NN_4
 a_prev = strong_left  → NN_5
 ```
 
-### Safety invariant
+Safety invariant:
 
 ```
 INVARSPEC (distance >= 200)
 ```
 
-where `distance = round(sqrt(x_mag² + y_mag²)) × 100`.
+with `distance = round(sqrt(x_mag² + y_mag²)) × distance_modifier`.
 
 ---
 
-## Monolithic Verification (baseline)
+## Artifacts: tree and SMV
 
-The monolithic result (from a reference run):
-
-```
-INVARSPEC: true
-User time: ~49 seconds
-Peak RSS:  ~9.6 GB
-```
-
-To regenerate the monolithic SMV and re-verify (from this directory):
+Both trees are **committed** (deterministic expansion). The base SMV is
+**generated and gitignored** under `symbolic/smv/` (large NN lookup tables).
 
 ```bash
-# 1. Generate tree from template
-python generate_acas_tree.py
+# Optional: regenerate expanded tree
+python3 -m core.acas_tree_generator
 
-# 2. Generate base SMV
-mkdir -p symbolic/smv
-python3 -c "
-import sys; sys.path.insert(0, '../../src')
-import dsl_to_nuxmv as _dsl
-_dsl.dsl_to_nuxmv('../../metamodel/behaverify.tx',
-    'tree/acas_360.tree', 'symbolic/smv/acas_360.smv',
-    False, False, False, False, 10000, False, True, None)
-"
+# Optional: refresh tree-sourced YAML fields from the template
+python3 -m core.acas_tree_parameter_extractor
 
-# 3. Verify with nuXmv
-../../nuXmv_DL/bin/nuXmv \
-    -source ../../commands/nuxmv_commands/command_all_invar \
-    ./symbolic/smv/acas_360.smv \
-    > results/monolithic/nuxmv_output.txt
-```
-
-Or use the all-in-one benchmark script (handles tree/SMV generation, monolithic run, discrete
-compositional run, and side-by-side summary):
-
-```bash
-./run_acas_monolithic_pipelines.sh
-./run_acas_monolithic_pipelines.sh --skip-monolithic   # use 2025_NEUS reference result (~9.6 GB RAM)
-```
-
-Use `command_all_invar` (not `command_invar`) to get nuXmv's internal timing.
-Report **User time** from the output.
-
----
-
-## Compositional Verification
-
-### Overview
-
-The compositional pipeline has four stages:
-
-```
-acas_safety_contract_generator.py  →  contract specs JSON
-acas_safety_contract_verifier.py    →  CROWN verification results JSON
-run_acas_compositional_pipeline.py  →  contract-injected SMV  →  nuXmv verdict
-```
-
-All commands below assume you are in this directory:
-
-```bash
-cd REPRODUCIBILITY/2026_TBA/examples/AcasXu_closed_loop
+# Base SMV (also done automatically by pipelines unless --skip-smv)
+# Prefer a pipeline run, or generate via any driver without --skip-smv.
 ```
 
 ---
 
-### Step 1 — Generate contract specs
+## Pipelines
 
-This enumerates all dangerous (state, advisory) pairs and groups them into
-range-based A/G contracts (bounding box over `x_mag`, `y_mag` for fixed
-`heading_own_var`, sign quadrant, and forbidden advisory).
+### Monolithic baseline
+
+Full closed-loop SMV with NN tables still inside. ~9.6 GB RSS if run live.
 
 ```bash
-python3 acas_safety_contract_generator.py
-# Output: contracts/crown/discrete/safety/safety_full_contracts.json
-# Expected: ~490 contracts for NN_1 (one per non-empty heading/sign/advisory group)
+# Use 2025_NEUS reference timing/verdict (no huge RAM)
+python3 scripts/run_acas_monolithic_pipeline.py --skip-monolithic
+
+# Live nuXmv (~12 GB free RAM recommended)
+python3 scripts/run_acas_monolithic_pipeline.py
 ```
 
-This step is fast (~1 minute) and does not require CROWN. The output is
-already committed in `contracts/crown/discrete/safety/safety_full_contracts.json`.
+Reference outcome: `INVARSPEC: true`, ~49 s user time, ~9.6 GB peak RSS.
+
+### Discrete safety
+
+```bash
+# Symbolic only on pre-verified corridor contracts
+python3 scripts/discrete/run_acas_safety_pipeline.py \
+    --specs contracts/crown/discrete/safety/safety_corridor_contracts.json \
+    --results contracts/crown/discrete/safety/safety_corridor_contract_results.json \
+    --output results/discrete/safety/corridor \
+    --skip-contracts --skip-tree --skip-smv
+
+# Full discrete safety for one network (generate + CROWN + symbolic)
+python3 scripts/discrete/run_acas_safety_pipeline.py \
+    --output results/discrete/safety/nn1 \
+    --network-idx 1 --discrete --run-crown
+```
+
+Patched SMV: `results/.../acas_closed_loop_safety.smv`.
+
+### Discrete liveness
+
+```bash
+python3 scripts/discrete/run_acas_liveness_pipeline.py --skip-tree --skip-smv --no-ctl
+python3 scripts/discrete/run_acas_liveness_pipeline.py --run-crown
+```
+
+Config and trajectory: `core/liveness/acas_liveness_params.yaml`,
+`core/liveness/acas_lasso_trajectory.json`.
+
+### Inductive corridor (report-style)
+
+```bash
+python3 scripts/discrete/run_acas_corridor_pipeline.py
+# → results/discrete/safety/corridor/pipeline_report.json
+```
+
+Runs discovery (`run_acas_inductive_invariant_check.py`), a seed CROWN check,
+then the safety pipeline with corridor JSON.
+
+### Continuous (deferred)
+
+`scripts/continuous/run_all_continuous_pipelines.sh` batches continuous-domain
+work. Frozen continuous CROWN results live under
+`contracts/crown/continuous/`. Prefer discrete pipelines for day-to-day runs.
 
 ---
 
-### Step 2 — Verify contracts via CROWN
+## Library entry points
 
-#### Pilot run (sanity check before committing to a full run)
+Prefer importing classes; modules also support `python3 -m` where noted.
 
-```bash
-python acas_safety_contract_verifier.py --limit 5
+```python
+from core.acas_domain import AcasDomain
+from core.acas_tree_generator import AcasTreeGenerator
+from core.acas_tree_parameter_extractor import AcasTreeParameterExtractor
+from core.acas_smv_contract_patcher import AcasSmvContractPatcher
+from core.safety.acas_safety_contract_generator import AcasSafetyContractGenerator
+from core.safety.acas_safety_contract_verifier import AcasSafetyContractVerifier
+from core.liveness.acas_liveness_contract_generator import AcasLivenessContractGenerator
+from core.liveness.acas_liveness_contract_verifier import AcasLivenessContractVerifier
 ```
 
-Expected output: a mix of SAT (~0.5s each) and TIMEOUT (30s each).
-
-#### Full run for NN_1
-
-Edit `acas_verifier_params.yaml` if you need to change the timeout or output
-path. The default is 30s per contract, NN_1 only.
-
-```bash
-nohup python acas_safety_contract_verifier.py > results/verify_nn1.log 2>&1 &
-```
-
-Expected: ~269 SAT, ~221 TIMEOUT, ~113 minutes total.
-
-#### Second-pass retry (higher timeout for TIMEOUT contracts)
-
-```bash
-nohup python acas_safety_contract_verifier.py \
-    --retry-from contracts/crown/continuous/enabled_pgd/aprev_clear_crown_results.json \
-    --timeout 60 \
-    > results/verify_nn1_retry.log 2>&1 &
-```
-
-This re-verifies only the TIMEOUT contracts and merges results into
-`contracts/crown/continuous/enabled_pgd/aprev_clear_crown_results.json`. Worst case: ~3.7 hours.
-
-> **Why two passes?** Contracts either verify in under 1s (large margin) or
-> time out quickly (near the NN's decision boundary). A short initial timeout
-> (30s) identifies easy contracts cheaply; a second pass at 60s recovers
-> borderline ones without wasting time on genuinely hard contracts.
+| Task | Entry |
+|------|--------|
+| Expand template → tree | `python3 -m core.acas_tree_generator` |
+| YAML from template constants | `python3 -m core.acas_tree_parameter_extractor` |
+| Safety specs / CROWN | `core/safety/...` (via safety pipeline or class API) |
+| Liveness specs / CROWN | `core/liveness/...` |
 
 ---
 
-### Step 3 — Run the compositional pipeline
-
-Using pre-computed contracts (skip tree/SMV regeneration):
-
-```bash
-python run_acas_compositional_pipeline.py \
-    --contracts contracts/crown/continuous/enabled_pgd/aprev_clear_crown_results.json \
-    --output    results/continuous/enabled_pgd/aprev_clear \
-    --skip-tree --skip-smv
-```
-
-Full pipeline (regenerate tree and SMV from scratch):
-
-```bash
-python run_acas_compositional_pipeline.py \
-    --contracts contracts/crown/continuous/enabled_pgd/aprev_clear_crown_results.json \
-    --output    results/compositional/continuous/enabled_pgd/aprev_clear
-```
-
-Results are written to `results/continuous/enabled_pgd/aprev_clear/pipeline_report.json`.
-
----
-
-## Interpreting Results
+## Interpreting results
 
 | Field | Meaning |
 |---|---|
-| `steps.smv_patch.sat_contracts` | SAT contracts used to inject constraints |
-| `steps.smv_patch.invar_lines` | INVAR constraints injected into the patched SMV |
-| `steps.smv_patch.nn_lines_removed` | NN lookup-table lines removed from base SMV |
-| `steps.nuxmv.invarspec` | `"true"` = invariant holds, `"false"` = counterexample |
-| `total_wall_sec` | End-to-end compositional time |
+| `steps.smv_patch.sat_contracts` | SAT contracts injected as INVARs |
+| `steps.smv_patch.invar_lines` | INVAR lines added |
+| `steps.smv_patch.nn_lines_removed` | NN table lines stripped from base SMV |
+| `steps.nuxmv.invarspec` | `"true"` holds / `"false"` counterexample |
+| `total_wall_sec` | End-to-end wall time |
 
-**INVARSPEC=false with TIMEOUT contracts present is almost certainly spurious.**
-nuXmv exploits the unconstrained states (from timed-out contracts) to construct
-a fake counterexample. The verdict is only meaningful when all 490 contracts are
-SAT. This is the same behavior observed in the grid-world example when fewer than
-38/38 contracts were verified.
+**`INVARSPEC=false` with TIMEOUT contracts is usually spurious:** holes in the
+abstraction let nuXmv invent paths. The verdict is meaningful when the relevant
+contracts are SAT (same pattern as the grid-world example).
 
-**INVARSPEC=false with 0 UNSAT contracts** confirms the issue is contract
-incompleteness, not a real safety violation. If UNSAT contracts appear, the NN
-genuinely violates a contract — investigate those cases first.
-
-The monolithic baseline is `true` in ~49s. A compositional run with
-complete contracts should also return `true` in significantly less time (the patched
-SMV has ~1,600 lines vs. ~9,700 for the monolithic model).
+Compositional patched models are much smaller than the monolithic SMV
+(~1.6k lines vs ~8k+ with full NN tables).
 
 ---
 
-## Timeout Sensitivity Experiment
+## Common issues
 
-Running the pipeline at multiple timeout levels and recording the SAT rate and
-nuXmv verdict is a meaningful experiment for paper evaluation:
-
-```
-Timeout | SAT contracts | nuXmv verdict
---------+---------------+---------------
-  5s    | ?             | false (spurious)
- 15s    | ?             | ?
- 30s    | 269           | false (spurious)
- 60s    | ?             | ?
-120s    | ?             | true (expected)
-```
-
-This demonstrates quantitatively how contract completeness affects the
-compositional proof — a property invisible to the monolithic approach.
-
----
-
-## Common Issues
-
-### INVARSPEC=false despite safe NNs
-
-Contract coverage is incomplete. Some TIMEOUT contracts leave holes in the
-abstraction that nuXmv uses to find a spurious path. Run the second-pass retry
-with a higher timeout. See the grid-world README for the same pattern.
-
-### `acas_safety_contract_verifier.py` gives wrong results with `--retry-from`
-
-The retry merges results by contract `id`. If `safety_full_contracts.json` was
-regenerated after the original verification run (changing contract `id`s), the
-merge will be incorrect. Always regenerate verification results from scratch if
-the spec file changes.
-
-### `generate_acas_tree.py` fails with `FileNotFoundError`
-
-The `tree/` directory must exist before running:
+### Tree / SMV missing
 
 ```bash
-mkdir -p tree symbolic/smv
-python generate_acas_tree.py
+python3 -m core.acas_tree_generator
+# Then run any pipeline without --skip-smv, or use a driver that builds SMV.
 ```
 
-### Monolithic SMV takes too long or runs out of memory
+### Monolithic OOM
 
-The monolithic SMV (`symbolic/smv/acas_360.smv`) is ~9,700 lines and contains 5 full
-NN lookup tables. nuXmv peak RSS is ~9.6 GB. Ensure at least 12 GB free RAM.
-The compositional patched SMV is ~1,600 lines and uses far less memory.
+`symbolic/smv/acas_closed_loop.smv` embeds five NN tables. Prefer
+`--skip-monolithic` on machines with less than ~12 GB free RAM.
 
-### `run_acas_compositional_pipeline.py` gives `INVARSPEC=None`
+### CROWN `--retry-from` mismatches
 
-Check `results/continuous/enabled_pgd/aprev_clear/nuxmv_output.txt` for nuXmv error messages.
-Common causes: SMV type errors (see `--skip-smv` flag to reuse a known-good
-base SMV), or missing nuXmv binary.
+Retry merges by contract `id`. If specs were regenerated, re-verify from
+scratch rather than merging against an old results file.
+
+### `INVARSPEC=None`
+
+Check `results/**/nuxmv_output.txt`. Typical causes: SMV type errors (reuse a
+known-good base with `--skip-smv`) or a missing nuXmv binary.
 
 ---
 
-## Contract Structure
+## Contract design (safety)
 
-Contracts are **range-based**: for each non-empty group of
-`(heading_own_var, x_sign, y_sign, forbidden_advisory)`, a single CROWN call
-verifies the property over the bounding box of all dangerous `(x_mag, y_mag)`
-states in that group.
+Range-based A/G contracts: for each non-empty group of
+`(heading_own_var, x_sign, y_sign, forbidden_advisory)`, one CROWN call covers
+the bounding box of dangerous `(x_mag, y_mag)` states.
 
-This mirrors the grid-world approach where source position was fixed and goal
-position ranged continuously. Here, `(heading_own_var, x_sign, y_sign)` is fixed
-(determining NN inputs 3–5 exactly) and `(x_mag, y_mag)` ranges over the dangerous
-region (determining NN inputs 1–2).
-
-| Grouping | Max contracts per NN | vs. per-state |
+| Grouping | Max contracts / NN | vs per-state |
 |---|---|---|
-| Per state | 2,830 | baseline |
-| Per heading+sign+advisory (this approach) | ~490 | ~6× reduction |
+| Per state | ~2,830 | baseline |
+| Per heading+sign+advisory (default) | ~490 | ~6× reduction |
 | Per sign+advisory only | ~100 | ~28× reduction |

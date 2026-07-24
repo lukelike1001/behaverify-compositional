@@ -69,6 +69,11 @@ reverses the earlier "Route A: use $\mathrm{Reach}_{\text{true}}$" recommendatio
 All reproducible via `acas_inductive_analysis.py` (every line below is a `[CHECK]`
 printout of that script).
 
+```
+07/23 Note: `acas_inductive_analysis.py` has since been renamed to
+`scripts/discrete/run_acas_inductive_invariant_check.py`
+```
+
 | Quantity | Value |
 |---|---|
 | Physical states | 19,360 (11 × 11 × 2 × 2 × 40) |

@@ -37,6 +37,9 @@ REPRODUCIBILITY/**/results/**
 REPRODUCIBILITY/**/smv/**
 REPRODUCIBILITY/**/LaTeX/**
 REPRODUCIBILITY/**/tree/**
+# ACAS closed-loop: commit template + expanded tree (deterministic; not force-regenerate)
+!REPRODUCIBILITY/2026_TBA/examples/AcasXu_closed_loop/tree/
+!REPRODUCIBILITY/2026_TBA/examples/AcasXu_closed_loop/tree/**
 REPRODUCIBILITY/**/xml/**
 REPRODUCIBILITY/**/python/**
 REPRODUCIBILITY/**/haskell/**

@@ -2,7 +2,8 @@
 acas_domain.py
 
 Static ACAS Xu closed-loop plant: numbers from acas_model_params.yaml plus
-executable physics that mirrors acas_template_360.tree environment_update.
+executable physics that mirrors tree/acas_closed_loop_template.tree
+environment_update.
 
 Owns model config and one-step dynamics only -- not viability, contracts,
 CROWN settings, or the BehaVerify .tree (those are separate layers).
@@ -29,7 +30,8 @@ class AcasDomain:
     Closed-loop plant parameters and step semantics.
 
     Construct with ``AcasDomain.from_yaml()``. Physics matches the sequential
-    environment_update in acas_template_360.tree (heading first, then position).
+    environment_update in tree/acas_closed_loop_template.tree
+    (heading first, then position).
     """
 
     # Physics (raw units from yaml)

@@ -9,12 +9,11 @@ physics:
   safety_threshold: 200
 nn_normalization:
   distance_mean: 19791.091
-  distance_range: 60261.0     # standard ACAS Xu constant; NeuS 2025 paper text says 60621 (paper typo)
+  distance_range: 60261.0
   speed_own_mean: 650.0
   speed_own_range: 1100.0
   speed_int_mean: 600.0
   speed_int_range: 1200.0
-# Fixed starting point of the closed loop (acas_template_360.tree initial_values).
 initial_state:
   x_mag: 7
   y_mag: 6

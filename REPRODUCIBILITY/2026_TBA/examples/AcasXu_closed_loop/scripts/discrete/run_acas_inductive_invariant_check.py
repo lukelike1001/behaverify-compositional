@@ -1,5 +1,5 @@
 """
-acas_check_inductive_invariant.py
+run_acas_inductive_invariant_check.py
 
 CHECK driver for the inductive-invariant stress test (companion to
 2026_07_12_inductive_invariant_stress_test.md).
@@ -11,7 +11,7 @@ Uses plant physics only (no networks).
 
 Usage (from AcasXu_closed_loop/):
 
-    python3 scripts/acas_check_inductive_invariant.py
+    python3 scripts/discrete/run_acas_inductive_invariant_check.py
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_EXAMPLE = Path(__file__).resolve().parent.parent
+_EXAMPLE = Path(__file__).resolve().parents[2]  # AcasXu_closed_loop/
 if str(_EXAMPLE) not in sys.path:
     sys.path.insert(0, str(_EXAMPLE))
 

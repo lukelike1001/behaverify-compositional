@@ -5,10 +5,10 @@
 #
 # Usage (from REPRODUCIBILITY/2026_TBA/examples/AcasXu_closed_loop/):
 #
-#   ./run_all_continuous_pipelines.sh                                               # defaults
-#   ./run_all_continuous_pipelines.sh contracts/crown/continuous/enabled_pgd/
-#   ./run_all_continuous_pipelines.sh contracts/crown/continuous/disabled_pgd/
-#   ./run_all_continuous_pipelines.sh contracts/crown/discrete/
+#   ./scripts/continuous/run_all_continuous_pipelines.sh                                               # defaults
+#   ./scripts/continuous/run_all_continuous_pipelines.sh contracts/crown/continuous/enabled_pgd/
+#   ./scripts/continuous/run_all_continuous_pipelines.sh contracts/crown/continuous/disabled_pgd/
+#   ./scripts/continuous/run_all_continuous_pipelines.sh contracts/crown/discrete/
 #
 # Outputs go to:
 #   results/<relative-path-under-crown>/<nn_stem>/pipeline_report.json
@@ -41,9 +41,12 @@ for CONTRACT_JSON in "${CONTRACTS_DIR}"/*.json; do
     echo "Output  : ${OUTPUT}"
     echo "========================================"
 
-    python3 run_acas_compositional_pipeline.py \
-        --contracts  "${CONTRACT_JSON}" \
+    # Continuous results JSON + full safety specs (IDs must align).
+    python3 scripts/discrete/run_acas_safety_pipeline.py \
+        --specs      contracts/crown/discrete/safety/safety_full_contracts.json \
+        --results    "${CONTRACT_JSON}" \
         --output     "${OUTPUT}" \
+        --skip-contracts \
         --skip-tree \
         --skip-smv
     echo ""

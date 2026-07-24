@@ -5,8 +5,8 @@ Monolithic verification of the ACAS Xu closed-loop SMV (networks left in the
 model — no contract INVAR injection).
 
 Stages:
-  1. [TREE]  Generate tree/acas_360.tree if missing (generate_acas_tree.py)
-  2. [SMV]   Generate symbolic/smv/acas_360.smv if missing (dsl_to_nuxmv)
+  1. [TREE]  Generate tree/acas_closed_loop.tree if missing (AcasTreeGenerator)
+  2. [SMV]   Generate symbolic/smv/acas_closed_loop.smv if missing (dsl_to_nuxmv)
   3. [NUXMV] Run nuXmv all-invar on the base SMV, or load the 2025_NEUS
              reference with --skip-monolithic (~9.6 GB RAM if run live)
 
@@ -31,7 +31,6 @@ import datetime
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -58,8 +57,8 @@ DEFAULT_NEUS_REFERENCE = (
     _EXAMPLE / "../../../2025_NEUS/examples/AcasXu_closed_loop/invar.txt"
 ).resolve()
 DEFAULT_OUTPUT_DIR = _EXAMPLE / "results/monolithic"
-DEFAULT_TREE = _EXAMPLE / "tree/acas_360.tree"
-DEFAULT_SMV = _EXAMPLE / "symbolic/smv/acas_360.smv"
+DEFAULT_TREE = _EXAMPLE / "tree/acas_closed_loop.tree"
+DEFAULT_SMV = _EXAMPLE / "symbolic/smv/acas_closed_loop.smv"
 
 
 def _ensure_tree(*, skip_if_exists: bool) -> dict[str, Any]:
@@ -71,24 +70,11 @@ def _ensure_tree(*, skip_if_exists: bool) -> dict[str, Any]:
         print(f"  Skipped — reusing {DEFAULT_TREE.relative_to(_EXAMPLE)}")
         return {"wall_sec": 0.0, "skipped": True}
 
-    DEFAULT_TREE.parent.mkdir(parents=True, exist_ok=True)
-    generator = _EXAMPLE / "generate_acas_tree.py"
-    if not generator.is_file():
-        raise FileNotFoundError(f"missing tree generator: {generator}")
+    from core.acas_tree_generator import AcasTreeGenerator  # noqa: PLC0415
 
     start = time.perf_counter()
-    completed = subprocess.run(
-        [sys.executable, str(generator)],
-        cwd=str(_EXAMPLE),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    AcasTreeGenerator(output_path=DEFAULT_TREE).generate()
     wall_sec = time.perf_counter() - start
-    if completed.returncode != 0:
-        raise RuntimeError(
-            f"generate_acas_tree.py failed:\n{completed.stderr or completed.stdout}"
-        )
     print(f"  Generated {DEFAULT_TREE.relative_to(_EXAMPLE)}  ({wall_sec:.1f}s)")
     return {"wall_sec": round(wall_sec, 3), "skipped": False}
 
