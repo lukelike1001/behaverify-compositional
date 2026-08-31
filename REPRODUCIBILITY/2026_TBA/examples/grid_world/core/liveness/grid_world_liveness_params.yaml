@@ -1,0 +1,24 @@
+# Liveness product line for grid world (paths relative to grid_world/).
+# Plant physics: grid_world_domain_config.yaml / GridWorldDomain.
+
+contracts_dir: contracts/discrete/liveness
+results_dir:   results/liveness
+
+# NN output classes in DSL order: We=0 Ea=1 No=2 So=3 XX=4.
+num_classes: 5
+stay_class_index: 4
+
+# Half-width on NN inputs. 0 = exact lattice point: the SMV guard matches an
+# exact (drone, goal) cell pair, so these are point queries, not robustness
+# boxes. Raise only if CROWN reports NaNs on degenerate boxes.
+nn_input_eps: 0.0
+
+# Expected shape for the committed 7x7 / 18-obstacle map. A change here means
+# the map or the physics moved; regenerate contracts and update the reports.
+expected_progress_pairs: 930
+expected_crown_obligations: 3596
+
+verification:
+  timeout_sec: 10.0
+  pgd_order: before
+  device: cpu

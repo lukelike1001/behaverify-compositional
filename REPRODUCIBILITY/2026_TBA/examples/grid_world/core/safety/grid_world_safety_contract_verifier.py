@@ -1,11 +1,12 @@
 """
-grid_world_contract_verifier.py
+grid_world_safety_contract_verifier.py
 
 Discharge grid-world A/G contracts with alpha-beta-CROWN.
 
 Owns neural verification only -- not the viability kernel (see
-grid_world_viability.py) and not inductive partition checks (see
-grid_world_inductive_proof.py).
+core/safety/grid_world_viability.py), not contract emission (see
+core/safety/grid_world_safety_contract_generator.py), and not inductive
+partition checks (see grid_world_inductive_proof.py).
 
 Modes:
   CONTINUOUS (default): one CROWN call per contract; goal ranges over the full
@@ -16,9 +17,9 @@ Class index mapping (DSL / NN order): We=0 Ea=1 No=2 So=3 XX=4
 
 Run from examples/grid_world/:
 
-    python3 grid_world_contract_verifier.py \\
+    python3 -m core.safety.grid_world_safety_contract_verifier \\
         --onnx networks/1000__6_18_0__0100_1.onnx \\
-        --output contracts/continuous_goals/enabled_pgd/out.json
+        --output contracts/continuous/enabled_pgd/out.json
 """
 
 from __future__ import annotations
@@ -33,19 +34,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-_HERE = Path(__file__).parent.resolve()
-_TBA = (_HERE / "../../").resolve()
+_TBA = Path(__file__).resolve().parents[4]
 if str(_TBA) not in sys.path:
     sys.path.insert(0, str(_TBA))
 
 from pipeline.crown_verifier import CrownVerifier  # noqa: E402
 from pipeline.process_memory import ProcessMemory  # noqa: E402
 
-from grid_world_viability import (  # noqa: E402
-    GridWorldContract,
-    GridWorldDomain,
+from core.grid_world_contract import GridWorldSafetyContract  # noqa: E402
+from core.grid_world_domain import GridWorldDomain, load_config  # noqa: E402
+from core.safety.grid_world_safety_contract_generator import (  # noqa: E402
     generate_contracts,
-    load_config,
 )
 
 DISCRETE_GOAL_DEFAULT_TIMEOUT_SEC: float = 5.0
@@ -75,7 +74,7 @@ def _status_marker(status: str) -> str:
 
 
 @dataclass
-class GridWorldContractVerifier:
+class GridWorldSafetyContractVerifier:
     """
     CROWN-based certifier for kernel-boundary contracts.
 
@@ -92,10 +91,10 @@ class GridWorldContractVerifier:
     discrete: bool = False
     discrete_timeout: float = DISCRETE_GOAL_DEFAULT_TIMEOUT_SEC
     device: str = "cpu"
-    contracts: list[GridWorldContract] = field(default_factory=list)
+    contracts: list[GridWorldSafetyContract] = field(default_factory=list)
 
     @classmethod
-    def from_config(cls, cfg: dict[str, Any]) -> GridWorldContractVerifier:
+    def from_config(cls, cfg: dict[str, Any]) -> GridWorldSafetyContractVerifier:
         """
         Build a verifier from a domain YAML dict plus runtime keys:
 
@@ -147,7 +146,7 @@ class GridWorldContractVerifier:
 
     def certify_continuous(
         self,
-        contract: GridWorldContract,
+        contract: GridWorldSafetyContract,
         crown_verifier: CrownVerifier | None = None,
     ) -> tuple[str, list[float] | None]:
         """One CROWN call: drone near source, goal over the full continuous grid."""
@@ -169,7 +168,7 @@ class GridWorldContractVerifier:
 
     def certify_discrete(
         self,
-        contract: GridWorldContract,
+        contract: GridWorldSafetyContract,
         crown_verifier: CrownVerifier | None = None,
     ) -> tuple[str, list[float] | None]:
         """
@@ -206,7 +205,7 @@ class GridWorldContractVerifier:
 
     def certify(
         self,
-        contract: GridWorldContract,
+        contract: GridWorldSafetyContract,
         crown_verifier: CrownVerifier | None = None,
     ) -> tuple[str, list[float] | None]:
         """Discharge one contract in the verifier's configured mode."""
@@ -324,13 +323,13 @@ class GridWorldContractVerifier:
 
 def run_verification(cfg: dict[str, Any]) -> dict[str, Any]:
     """Pipeline entry point: build verifier from cfg and certify all contracts."""
-    return GridWorldContractVerifier.from_config(cfg).certify_all()
+    return GridWorldSafetyContractVerifier.from_config(cfg).certify_all()
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description="Verify grid-world A/G contracts via alpha-beta-CROWN "
-                    "(GridWorldContractVerifier)."
+                    "(GridWorldSafetyContractVerifier)."
     )
     parser.add_argument(
         "--config",

@@ -18,24 +18,37 @@ For setup (BehaVerify, nuXmv, alpha-beta-CROWN), see the
 grid_world/
 ├── networks/              # 7 ONNX files — see networks/README.md for naming convention
 ├── contracts/             # Pre-computed A/G contracts (CROWN output, JSON)
-│   └── crown/
-│       ├── continuous_goals/
-│       │   ├── enabled_pgd/   # PGD-enabled contracts (SAT/UNSAT, zero timeouts)
-│       │   └── disabled_pgd/  # BaB-only contracts (baseline comparison, some timeouts)
-│       └── discrete_goals/    # Discrete contracts (eps=0, replicates 2025_NEUS integer-point check)
+│   ├── continuous/        # eps > 0, goal ranges over the real grid
+│   │   ├── enabled_pgd/   # PGD-enabled contracts (SAT/UNSAT, zero timeouts)
+│   │   └── disabled_pgd/  # BaB-only contracts (baseline comparison, some timeouts)
+│   └── discrete/          # eps = 0, lattice-point queries
+│       ├── safety/        # never-select on ∂V (replicates 2025_NEUS integer-point check)
+│       └── liveness/      # set-membership in Dec(source, goal) — progress contracts
 ├── results/
 │   ├── compositional/     # Pipeline reports (pipeline_report.json per network per mode)
-│   │   ├── continuous_goals/enabled_pgd/
-│   │   ├── continuous_goals/disabled_pgd/
-│   │   └── discrete_goals/
+│   │   ├── continuous/{enabled_pgd,disabled_pgd}/
+│   │   └── discrete/safety/
+│   ├── liveness/          # run_liveness_pipeline.py output
 │   └── monolithic/        # nuXmv output from the 2025_NEUS table approach
 ├── figures/               # Generated figures and scripts — see figures/README.md
-├── grid_world_viability.py            # Domain physics, viability kernel V, ∂V contracts (no CROWN)
+├── core/                              # Contract lifecycle: physics → generate → discharge with CROWN (no nuXmv)
+│   ├── paths.py                       # EXAMPLE_ROOT anchor for core/ submodules
+│   ├── grid_world_domain.py           # Action tables, config loading, physics (GridWorldDomain)
+│   ├── grid_world_contract.py         # A/G contract records (GridWorldSafetyContract)
+│   ├── safety/
+│   │   ├── grid_world_viability.py    # Viability partition V / ∂V (GridWorldViabilityKernel)
+│   │   ├── grid_world_safety_contract_generator.py  # ∂V → contracts
+│   │   └── grid_world_safety_contract_verifier.py   # CROWN discharge (never-select)
+│   └── liveness/
+│       ├── grid_world_goal_distance.py  # dist(s,g) / Dec(s,g) ranking
+│       ├── grid_world_liveness_contract_generator.py  # progress pairs → contracts
+│       ├── grid_world_liveness_contract_verifier.py   # CROWN discharge (set-membership)
+│       └── grid_world_liveness_params.yaml            # eps, timeouts, expected shape
 ├── grid_world_inductive_proof.py      # Hover-theorem / partition checks (GridWorldInductiveProof)
-├── grid_world_contract_verifier.py    # CROWN discharge (GridWorldContractVerifier)
 ├── grid_world_smv_builder.py          # Contract-injected SMV (GridWorldSmvBuilder)
 ├── grid_world_pipeline_context.py     # CLI path setup (GridWorldPipelineContext)
-├── run_compositional_pipeline.py      # Single-network end-to-end compositional pipeline
+├── run_compositional_pipeline.py      # Single-network safety pipeline (INVARSPEC)
+├── run_liveness_pipeline.py           # Single-network liveness pipeline (INVARSPEC + CTLSPEC)
 ├── run_all_compositional_pipelines.sh # Batch: run compositional pipeline for all networks in a contracts folder
 ├── run_all_monolithic_pipelines.sh    # Batch: run monolithic pipeline for all 7 networks
 ├── grid_world_domain_config.yaml      # Domain config: grid bounds, obstacles, EPS, timeout
@@ -79,23 +92,23 @@ directly. PGD only matters when re-running contract verification from scratch.
 # Unsafe network (0995, ~99.5% accuracy) -- expect INVAR=false
 python run_compositional_pipeline.py \
     --onnx networks/0995__6_18_0__200_1.onnx \
-    --output results/compositional/continuous_goals/disabled_pgd/0995 \
+    --output results/compositional/continuous/disabled_pgd/0995 \
     --skip-contracts \
-    --contracts contracts/continuous_goals/disabled_pgd/0995__6_18_0__200_1.json
+    --contracts contracts/continuous/disabled_pgd/0995__6_18_0__200_1.json
 
 # 100%-accurate network, BaB-only contracts -- expect INVAR=false (UNSAT contracts)
 python run_compositional_pipeline.py \
     --onnx networks/1000__6_18_0__0100_1.onnx \
-    --output results/compositional/continuous_goals/disabled_pgd/1000__0100 \
+    --output results/compositional/continuous/disabled_pgd/1000__0100 \
     --skip-contracts \
-    --contracts contracts/continuous_goals/disabled_pgd/1000__6_18_0__0100_1.json
+    --contracts contracts/continuous/disabled_pgd/1000__6_18_0__0100_1.json
 
 # 100%-accurate network, PGD contracts -- expect INVAR=false (genuine UNSAT)
 python run_compositional_pipeline.py \
     --onnx networks/1000__6_18_0__0100_1.onnx \
-    --output results/compositional/continuous_goals/enabled_pgd/1000__0100 \
+    --output results/compositional/continuous/enabled_pgd/1000__0100 \
     --skip-contracts \
-    --contracts contracts/continuous_goals/enabled_pgd/1000__6_18_0__0100_1_pgd60.json
+    --contracts contracts/continuous/enabled_pgd/1000__6_18_0__0100_1_pgd60.json
 ```
 
 Each run produces a `pipeline_report.json` in the output directory with per-step
@@ -104,27 +117,28 @@ wall time, peak memory, contract counts, and nuXmv verdict.
 ### Full Pipeline (re-verifying contracts via CROWN)
 
 Re-run contract verification with PGD enabled (recommended). Contracts are the
-kernel-boundary set from `grid_world_viability.generate_contracts()`; CROWN is
-driven by `GridWorldContractVerifier`:
+kernel-boundary set from
+`core.safety.grid_world_safety_contract_generator.generate_contracts()`; CROWN is
+driven by `GridWorldSafetyContractVerifier`:
 
 ```bash
-python grid_world_contract_verifier.py \
+python3 -m core.safety.grid_world_safety_contract_verifier \
     --onnx networks/1000__6_18_0__0100_1.onnx \
-    --output contracts/continuous_goals/enabled_pgd/1000__6_18_0__0100_1_pgd60.json
+    --output contracts/continuous/enabled_pgd/1000__6_18_0__0100_1_pgd60.json
 ```
 
 Other modes:
 
 ```bash
 # BaB only (no PGD)
-python grid_world_contract_verifier.py --no-pgd \
+python3 -m core.safety.grid_world_safety_contract_verifier --no-pgd \
     --onnx networks/1000__6_18_0__0100_1.onnx \
-    --output contracts/continuous_goals/disabled_pgd/1000__6_18_0__0100_1.json
+    --output contracts/continuous/disabled_pgd/1000__6_18_0__0100_1.json
 
 # Discrete integer goals (replicates 2025_NEUS-style point checks)
-python grid_world_contract_verifier.py --discrete \
+python3 -m core.safety.grid_world_safety_contract_verifier --discrete \
     --onnx networks/1000__6_18_0__0100_1.onnx \
-    --output contracts/discrete_goals/1000__6_18_0__0100_1_discrete.json
+    --output contracts/discrete/safety/1000__6_18_0__0100_1_discrete.json
 ```
 
 > The `_pgd60` suffix is a naming convention matching `timeout_sec: 60` in
@@ -135,8 +149,8 @@ Then run the pipeline:
 ```bash
 python run_compositional_pipeline.py \
     --onnx networks/1000__6_18_0__0100_1.onnx \
-    --output results/compositional/continuous_goals/enabled_pgd/1000__0100 \
-    --contracts contracts/continuous_goals/enabled_pgd/1000__6_18_0__0100_1_pgd60.json
+    --output results/compositional/continuous/enabled_pgd/1000__0100 \
+    --contracts contracts/continuous/enabled_pgd/1000__6_18_0__0100_1_pgd60.json
 ```
 
 Kernel / hover checks (no CROWN, no ONNX):

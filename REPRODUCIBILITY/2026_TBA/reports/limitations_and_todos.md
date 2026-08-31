@@ -2,6 +2,9 @@
 
 **Last Updated:** 2026-07-14
 
+2026-08-25 Note: This is very outdated, so I wouldn't rely on using this as the
+most up-to-date stuff.
+
 Living document (unlike dated snapshot reports). Append, edit, and reprioritize freely.
 
 ---

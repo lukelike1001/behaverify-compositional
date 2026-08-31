@@ -17,6 +17,10 @@ smv:
   neural_var: network
   pos_x:      drone_x
   pos_y:      drone_y
+  # Goal variables: required by liveness contracts, whose guard pins the goal
+  # cell as well as the drone cell. Unused by safety-only runs.
+  goal_x:     destination_x
+  goal_y:     destination_y
   domain:
     - left
     - right

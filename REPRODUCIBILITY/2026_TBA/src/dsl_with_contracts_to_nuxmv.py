@@ -115,16 +115,57 @@ def build_invar_lines(
     pos_x_smv: str,
     pos_y_smv: str,
     dir_map: dict[str, str],
+    goal_x_smv: str | None = None,
+    goal_y_smv: str | None = None,
 ) -> list[str]:
-    """Generate INVAR constraint lines from the verified A/G contracts."""
+    """
+    Generate INVAR constraint lines from the verified A/G contracts.
+
+    Two guarantee shapes are supported, distinguished by which keys a contract
+    record carries:
+
+      never_selects (safety)  "forbidden_dir"
+          guard on the drone cell only -- the contract holds for every goal.
+
+      in_set (liveness)       "forbidden_dirs" + "goal"
+          guard on the drone cell AND the goal cell, one line per action
+          outside Dec. Their conjunction says the NN output lies in Dec, which
+          is the progress step the CTL specification needs.
+
+    A liveness contract requires goal_x_smv / goal_y_smv: without the goal in
+    the guard the constraint would forbid an action at that cell for every
+    goal, which is unsound -- the same move is required elsewhere.
+    """
     lines = []
     for c in contracts:
         cx, cy = c["source"]
-        label = dir_map.get(c["forbidden_dir"], c["forbidden_dir"])
-        lines.append(
-            f"INVAR (system.{pos_x_smv} = {cx} & system.{pos_y_smv} = {cy})"
-            f" -> system.{neural_smv} != {label};"
+        drone_guard = (
+            f"system.{pos_x_smv} = {cx} & system.{pos_y_smv} = {cy}"
         )
+
+        if "forbidden_dirs" in c:
+            if goal_x_smv is None or goal_y_smv is None:
+                raise ValueError(
+                    "liveness contracts need goal_x / goal_y SMV variable "
+                    "names; got None. Set them in the pipeline smv config."
+                )
+            gx, gy = c["goal"]
+            guard = (
+                f"{drone_guard} & "
+                f"system.{goal_x_smv} = {gx} & system.{goal_y_smv} = {gy}"
+            )
+            for direction in c["forbidden_dirs"]:
+                label = dir_map.get(direction, direction)
+                lines.append(
+                    f"INVAR ({guard})"
+                    f" -> system.{neural_smv} != {label};"
+                )
+        else:
+            label = dir_map.get(c["forbidden_dir"], c["forbidden_dir"])
+            lines.append(
+                f"INVAR ({drone_guard})"
+                f" -> system.{neural_smv} != {label};"
+            )
     return lines
 
 
@@ -152,6 +193,8 @@ def patch_smv(
     domain: list[str],
     dir_map: dict[str, str],
     output_path: str,
+    goal_x: str | None = None,
+    goal_y: str | None = None,
 ) -> None:
     """Apply all three patches to the base SMV and write the result."""
     with open(base_smv_path, encoding="utf-8") as f:
@@ -160,9 +203,15 @@ def patch_smv(
     pos_x_smv  = pos_x + "_stage_0"
     pos_y_smv  = pos_y + "_stage_0"
 
+    goal_x_smv = goal_x + "_stage_0" if goal_x else None
+    goal_y_smv = goal_y + "_stage_0" if goal_y else None
+
     smv = remove_neural_define(smv, neural_smv)
     smv = add_neural_var(smv, neural_smv, domain)
-    invars = build_invar_lines(contracts, neural_smv, pos_x_smv, pos_y_smv, dir_map)
+    invars = build_invar_lines(
+        contracts, neural_smv, pos_x_smv, pos_y_smv, dir_map,
+        goal_x_smv, goal_y_smv,
+    )
     smv = inject_invars(smv, invars)
 
     with open(output_path, "w", encoding="utf-8") as f:
@@ -181,6 +230,8 @@ def dsl_with_contracts_to_nuxmv(
     pos_y: str,
     domain: list[str],
     dir_map: dict[str, str],
+    goal_x: str | None = None,
+    goal_y: str | None = None,
     keep_stage_0: bool = False,
     keep_last_stage: bool = False,
     do_not_trim: bool = False,
@@ -203,7 +254,10 @@ def dsl_with_contracts_to_nuxmv(
             recursion_limit, False, skip_grammar_check, record_times,
         )
         print(f"\n[3/3] Patching SMV: replace NN table with A/G contracts")
-        patch_smv(tmp.name, contracts, neural_var, pos_x, pos_y, domain, dir_map, output_file)
+        patch_smv(
+            tmp.name, contracts, neural_var, pos_x, pos_y, domain, dir_map,
+            output_file, goal_x, goal_y,
+        )
     finally:
         os.unlink(tmp.name)
 

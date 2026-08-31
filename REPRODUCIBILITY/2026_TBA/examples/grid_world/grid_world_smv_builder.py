@@ -45,6 +45,8 @@ class GridWorldSmvBuilder:
     pos_y: str
     domain: list[str]
     src_dir: str
+    goal_x: str | None = None
+    goal_y: str | None = None
 
     @classmethod
     def from_pipeline_ctx(
@@ -66,6 +68,8 @@ class GridWorldSmvBuilder:
             pos_y=str(smv_cfg["pos_y"]),
             domain=list(smv_cfg["domain"]),
             src_dir=str(smv_cfg["src_dir"]),
+            goal_x=smv_cfg.get("goal_x"),
+            goal_y=smv_cfg.get("goal_y"),
         )
 
     def count_sat_contracts(self) -> int:
@@ -101,6 +105,8 @@ class GridWorldSmvBuilder:
             pos_y=self.pos_y,
             domain=self.domain,
             dir_map=_conv.DEFAULT_DIR_MAP,
+            goal_x=self.goal_x,
+            goal_y=self.goal_y,
             skip_grammar_check=True,
         )
 

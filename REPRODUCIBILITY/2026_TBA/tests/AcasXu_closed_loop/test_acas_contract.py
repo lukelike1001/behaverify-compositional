@@ -6,18 +6,13 @@ Loads committed JSON under examples/AcasXu_closed_loop/contracts/.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
 
-_EXAMPLE = (
-    Path(__file__).resolve().parents[2]
-    / "examples"
-    / "AcasXu_closed_loop"
-)
-if str(_EXAMPLE) not in sys.path:
-    sys.path.insert(0, str(_EXAMPLE))
+from example_imports import activate_example
+
+# Both examples ship a top-level `core` package; activate this one so import
+# order between test files does not decide which package `core.*` resolves to.
+_EXAMPLE = activate_example("AcasXu_closed_loop")
 
 from core.acas_contract import AcasLivenessContract, AcasSafetyContract  # noqa: E402
 

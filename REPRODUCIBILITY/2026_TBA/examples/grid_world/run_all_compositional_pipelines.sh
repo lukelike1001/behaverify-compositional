@@ -7,20 +7,20 @@
 # Usage (from REPRODUCIBILITY/2026_TBA/examples/grid_world/):
 #
 #   ./run_all_compositional_pipelines.sh                                              # defaults
-#   ./run_all_compositional_pipelines.sh contracts/continuous_goals/disabled_pgd/
-#   ./run_all_compositional_pipelines.sh contracts/continuous_goals/enabled_pgd/
-#   ./run_all_compositional_pipelines.sh contracts/discrete_goals/
+#   ./run_all_compositional_pipelines.sh contracts/continuous/disabled_pgd/
+#   ./run_all_compositional_pipelines.sh contracts/continuous/enabled_pgd/
+#   ./run_all_compositional_pipelines.sh contracts/discrete/safety/
 #
 # Outputs go to:
 #   results/compositional/<relative-path-under-crown>/<network_stem>/pipeline_report.json
 #
 # The output path mirrors the contracts/ structure under results/compositional/:
-#   contracts/continuous_goals/enabled_pgd/ -> results/compositional/continuous_goals/enabled_pgd/
-#   contracts/discrete_goals/               -> results/compositional/discrete_goals/
+#   contracts/continuous/enabled_pgd/ -> results/compositional/continuous/enabled_pgd/
+#   contracts/discrete/safety/               -> results/compositional/discrete/
 
 set -euo pipefail
 
-CONTRACTS_DIR="${1:-contracts/continuous_goals/enabled_pgd}"
+CONTRACTS_DIR="${1:-contracts/continuous/enabled_pgd}"
 
 # Strip leading "contracts/" to get the relative subfolder, then mirror under results/compositional/
 RELATIVE="${CONTRACTS_DIR#contracts/}"

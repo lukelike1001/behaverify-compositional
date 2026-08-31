@@ -13,12 +13,11 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 
-from grid_world_viability import (
-    ACTIONS,
-    GridWorldDomain,
-    GridWorldViabilityKernel,
-    load_config,
+from core.grid_world_domain import ACTIONS, GridWorldDomain, load_config
+from core.safety.grid_world_safety_contract_generator import (
+    GridWorldSafetyContractGenerator,
 )
+from core.safety.grid_world_viability import GridWorldViabilityKernel
 
 
 @dataclass
@@ -28,8 +27,9 @@ class GridWorldInductiveProof:
 
     Holds a domain and its viability kernel; each check_* method is one
     obligation from the companion report. Does not own physics, partition
-    logic, or CROWN verification -- those live on GridWorldDomain /
-    GridWorldViabilityKernel / GridWorldContractVerifier.
+    logic, contract emission, or CROWN verification -- those live on
+    GridWorldDomain / GridWorldViabilityKernel /
+    GridWorldSafetyContractGenerator / GridWorldSafetyContractVerifier.
     """
 
     domain: GridWorldDomain
@@ -42,6 +42,12 @@ class GridWorldInductiveProof:
         domain = GridWorldDomain.from_config(load_config(config_path))
         kernel = GridWorldViabilityKernel.compute(domain)
         return cls(domain=domain, kernel=kernel)
+
+    def contracts(self):
+        """Safety contracts emitted from this kernel's ∂V."""
+        return GridWorldSafetyContractGenerator(
+            kernel=self.kernel,
+        ).generate_all_contracts()
 
     # --- individual claims -------------------------------------------------
 
@@ -84,7 +90,7 @@ class GridWorldInductiveProof:
 
     def check_contracts_are_crash_edges(self) -> None:
         """Every boundary contract forbids a real one-step crash into an obstacle."""
-        contracts = self.kernel.contracts_from_boundary()
+        contracts = self.contracts()
         print(f"[CHECK] |∂V contracts| = {len(contracts)}")
         assert len(contracts) > 0
         for c in contracts:
@@ -117,7 +123,7 @@ class GridWorldInductiveProof:
         self.check_allowed_histogram()
 
         k = self.kernel
-        contracts = k.contracts_from_boundary()
+        contracts = self.contracts()
         print()
         print("Summary")
         print("-------")

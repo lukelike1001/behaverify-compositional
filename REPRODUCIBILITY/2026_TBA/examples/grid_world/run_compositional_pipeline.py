@@ -13,7 +13,7 @@ Usage (from REPRODUCIBILITY/2026_TBA/examples/grid_world/):
 
   python run_compositional_pipeline.py \\
       --onnx    networks/1000__6_18_0__0200_1.onnx \\
-      --output  results/compositional/continuous_goals/enabled_pgd/1000__0200 \\
+      --output  results/compositional/continuous/enabled_pgd/1000__0200 \\
       [--tree       path/to/counter.tree]
       [--config     grid_world_domain_config.yaml]
       [--nuxmv      ../../nuXmv_DL/bin/nuXmv]
@@ -46,10 +46,10 @@ if str(_TBA) not in sys.path:
 
 from pipeline.nuxmv_verifier import NuxmvVerifier
 from pipeline.pipeline_report_writer import PipelineReportWriter
-from grid_world_contract_verifier import run_verification
+from core.safety.grid_world_safety_contract_verifier import run_verification
 from grid_world_pipeline_context import GridWorldPipelineContext
 from grid_world_smv_builder import GridWorldSmvBuilder
-from grid_world_viability import load_config
+from core.grid_world_domain import load_config
 
 
 # ---------------------------------------------------------------------------

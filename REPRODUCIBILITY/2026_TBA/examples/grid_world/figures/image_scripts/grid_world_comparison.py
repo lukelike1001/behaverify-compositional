@@ -10,7 +10,7 @@ Monolithic pipeline  (2025_NEUS table approach):
 
 Compositional pipeline (2026_TBA, discrete mode):
     pre-verified contracts  →  BehaVerify  →  .smv  →  nuXmv  →  verdict
-    Data source: REPRODUCIBILITY/2026_TBA/examples/grid_world/results/compositional/discrete_goals/
+    Data source: REPRODUCIBILITY/2026_TBA/examples/grid_world/results/compositional/discrete/
 
 NOTE: CROWN contract verification (~30–47 min per network) was pre-computed and is
       NOT included in the timing bars. The bars show only the symbolic phase:
@@ -35,7 +35,7 @@ import numpy as np
 
 _HERE    = Path(__file__).parent.resolve()                                            # figures/image_scripts/
 _NEUS    = (_HERE / "../../../../../2025_NEUS/examples/grid_world/results").resolve() # REPRODUCIBILITY/2025_NEUS/...
-_COMP    = (_HERE / "../../results/compositional/discrete_goals").resolve()            # grid_world/results/...
+_COMP    = (_HERE / "../../results/compositional/discrete").resolve()            # grid_world/results/...
 _OUT_DIR = (_HERE / "..").resolve()                                                    # figures/
 
 # ---------------------------------------------------------------------------
