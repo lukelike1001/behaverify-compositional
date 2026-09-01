@@ -6,7 +6,7 @@ Safety-side contract generation from plant physics (AcasDomain).
 Produces list[AcasSafetyContract] (range boxes over dangerous cells).
 CLI writes contracts/discrete/safety/safety_full_contracts.json via dump_json.
 
-No CROWN; no liveness pins.
+No CROWN.
 
 Usage (from AcasXu_closed_loop/):
 

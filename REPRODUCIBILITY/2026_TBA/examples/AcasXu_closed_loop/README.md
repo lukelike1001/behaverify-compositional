@@ -38,7 +38,11 @@ with different algorithms:
 | Line | Driver | Contracts | CROWN property |
 |------|--------|-----------|----------------|
 | **Safety** | `scripts/discrete/run_acas_safety_pipeline.py` | range A/G (never-selects) | forbidden advisory not selected |
-| **Liveness** | `scripts/discrete/run_acas_liveness_pipeline.py` | equals pins on a lasso trajectory | always-selects required advisory |
+
+ACAS Xu's canonical properties are input-output safety conditions; the
+benchmark has no liveness specification, and this project does not invent one.
+The empty `liveness/` folders exist for symmetry with grid world — see their
+`DISCLAIMER.md`.
 
 Shared plant and tooling live under `core/`. Drivers live under `scripts/`.
 
@@ -69,26 +73,25 @@ AcasXu_closed_loop/
 │   ├── acas_state.py                    # State / augmented state
 │   ├── acas_reachability.py             # Reachability kernel R
 │   ├── acas_viability.py                # Viability kernel V
-│   ├── acas_contract.py                 # Safety / liveness contract types
+│   ├── acas_contract.py                 # Safety contract types
 │   ├── acas_smv_contract_patcher.py     # Inject SAT contracts into SMV
 │   ├── acas_tree_generator.py           # AcasTreeGenerator
 │   ├── acas_tree_parameter_extractor.py # YAML refresh from template constants
 │   ├── acas_model_params.yaml           # Single source of truth (physics + catalogs)
 │   ├── acas_verifier_params.yaml        # CROWN + SMV variable names
 │   ├── safety/                          # Safety generator / verifier / classifier
-│   └── liveness/                        # Trajectory, config, generator, verifier
+│   └── liveness/                        # DISCLAIMER.md only (see above)
 ├── scripts/
 │   ├── run_acas_monolithic_pipeline.py  # Baseline (NNs stay in the SMV)
 │   ├── discrete/
 │   │   ├── run_acas_safety_pipeline.py  # Safety product line
-│   │   ├── run_acas_liveness_pipeline.py
 │   │   ├── run_acas_corridor_pipeline.py      # Inductive corridor end-to-end
 │   │   └── run_acas_inductive_invariant_check.py
 │   └── continuous/
 │       └── run_all_continuous_pipelines.sh    # Deferred continuous batch
 ├── contracts/
 │   ├── continuous/                      # Frozen continuous CROWN results
-│   └── discrete/{safety,liveness}/      # Discrete specs + results (committed)
+│   └── discrete/safety/                 # Discrete specs + results (committed)
 ├── results/{discrete,monolithic,continuous}/  # Pipeline outputs (gitignored)
 ├── networks/                            # 5 ONNX models
 └── figures/                             # Gradio explorer + figure docs
@@ -209,16 +212,6 @@ python3 scripts/discrete/run_acas_safety_pipeline.py \
 
 Patched SMV: `results/.../acas_closed_loop_safety.smv`.
 
-### Discrete liveness
-
-```bash
-python3 scripts/discrete/run_acas_liveness_pipeline.py --skip-tree --skip-smv --no-ctl
-python3 scripts/discrete/run_acas_liveness_pipeline.py --run-crown
-```
-
-Config and trajectory: `core/liveness/acas_liveness_params.yaml`,
-`core/liveness/acas_lasso_trajectory.json`.
-
 ### Inductive corridor (report-style)
 
 ```bash
@@ -248,8 +241,6 @@ from core.acas_tree_parameter_extractor import AcasTreeParameterExtractor
 from core.acas_smv_contract_patcher import AcasSmvContractPatcher
 from core.safety.acas_safety_contract_generator import AcasSafetyContractGenerator
 from core.safety.acas_safety_contract_verifier import AcasSafetyContractVerifier
-from core.liveness.acas_liveness_contract_generator import AcasLivenessContractGenerator
-from core.liveness.acas_liveness_contract_verifier import AcasLivenessContractVerifier
 ```
 
 | Task | Entry |
@@ -257,7 +248,6 @@ from core.liveness.acas_liveness_contract_verifier import AcasLivenessContractVe
 | Expand template → tree | `python3 -m core.acas_tree_generator` |
 | YAML from template constants | `python3 -m core.acas_tree_parameter_extractor` |
 | Safety specs / CROWN | `core/safety/...` (via safety pipeline or class API) |
-| Liveness specs / CROWN | `core/liveness/...` |
 
 ---
 

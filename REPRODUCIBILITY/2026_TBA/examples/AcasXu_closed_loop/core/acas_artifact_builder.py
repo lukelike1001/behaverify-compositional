@@ -5,7 +5,7 @@ Builds the two derived artifacts every ACAS Xu pipeline needs before it can
 verify anything: the expanded .tree (via AcasTreeGenerator) and the base .smv
 (via dsl_to_nuxmv, networks still inlined as lookup tables).
 
-Safety, liveness, and monolithic drivers all open with these same two stages,
+The safety and monolithic drivers both open with these same two stages,
 so they live here rather than being re-typed in each scripts/ driver. Each
 stage is a no-op when its artifact already exists and reuse is requested.
 

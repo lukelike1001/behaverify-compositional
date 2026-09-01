@@ -4,8 +4,8 @@ acas_smv_contract_patcher.py
 Symbolic half of ACAS Xu compositional verification: abstract the five NN
 lookup tables out of a base SMV and inject SAT A/G contracts as INVARs.
 
-Does not run CROWN or nuXmv. Safety (not_equals) and liveness (equals)
-contracts share the same patch pipeline; guarantee_type selects the INVAR.
+Does not run CROWN or nuXmv. ACAS Xu has one contract kind -- safety
+never-select -- so every INVAR emitted here is a not_equals constraint.
 
 Typical use:
 
@@ -200,11 +200,9 @@ class AcasSmvContractPatcher:
         sat_contracts: list[dict[str, Any]],
     ) -> list[str]:
         """
-        One INVAR per lattice cell in each SAT contract.
+        One INVAR per lattice cell in each SAT contract:
 
-        guarantee_type:
-          not_equals (default) — command_final != forbidden_advisory
-          equals               — command_final = required_advisory
+            command_final != forbidden_advisory
         """
         names = self.smv_variable_names
         lines: list[str] = []
@@ -213,8 +211,6 @@ class AcasSmvContractPatcher:
             x_sign = contract["x_sign"]
             y_sign = contract["y_sign"]
             a_prev = contract["a_prev"]
-            guarantee_type = contract.get("guarantee_type", "not_equals")
-
             for x_mag, y_mag in contract["dangerous_xy"]:
                 condition = (
                     f"system.{names['command_prev']} = {a_prev} & "
@@ -224,18 +220,11 @@ class AcasSmvContractPatcher:
                     f"system.{names['x_mag']} = {x_mag} & "
                     f"system.{names['y_mag']} = {y_mag}"
                 )
-                if guarantee_type == "equals":
-                    required = contract["required_advisory"]
-                    lines.append(
-                        f"INVAR ({condition}) -> "
-                        f"system.{names['command_final']} = {required};"
-                    )
-                else:
-                    forbidden = contract["forbidden_advisory"]
-                    lines.append(
-                        f"INVAR ({condition}) -> "
-                        f"system.{names['command_final']} != {forbidden};"
-                    )
+                forbidden = contract["forbidden_advisory"]
+                lines.append(
+                    f"INVAR ({condition}) -> "
+                    f"system.{names['command_final']} != {forbidden};"
+                )
         return lines
 
     def inject_invar_lines(self, smv_text: str, invar_lines: list[str]) -> str:

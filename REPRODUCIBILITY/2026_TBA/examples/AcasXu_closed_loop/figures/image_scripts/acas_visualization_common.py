@@ -1,7 +1,7 @@
 """
 Shared ACAS Xu plane visualization (Plotly + model params).
 
-Used by acas_contract_explorer.py and acas_lasso_explorer.py. No Gradio.
+Used by acas_contract_explorer.py. No Gradio.
 """
 
 from __future__ import annotations

@@ -2,6 +2,9 @@
 Minimal tests for typed ACAS contract specs.
 
 Loads committed JSON under examples/AcasXu_closed_loop/contracts/.
+
+ACAS Xu has one contract kind -- safety never-select. See
+examples/AcasXu_closed_loop/contracts/discrete/liveness/DISCLAIMER.md.
 """
 
 from __future__ import annotations
@@ -14,7 +17,7 @@ from example_imports import activate_example
 # order between test files does not decide which package `core.*` resolves to.
 _EXAMPLE = activate_example("AcasXu_closed_loop")
 
-from core.acas_contract import AcasLivenessContract, AcasSafetyContract  # noqa: E402
+from core.acas_contract import AcasSafetyContract  # noqa: E402
 
 _CONTRACTS = _EXAMPLE / "contracts"
 
@@ -40,15 +43,6 @@ def test_load_safety_full_sample() -> None:
     assert first.forbidden_advisory_idx >= 0
 
 
-def test_load_liveness_contracts() -> None:
-    path = _CONTRACTS / "discrete" / "liveness" / "liveness_contracts.json"
-    contracts = AcasLivenessContract.load_json(path)
-    assert len(contracts) == 52
-    assert all(isinstance(c, AcasLivenessContract) for c in contracts)
-    assert contracts[0].required_advisory
-    assert contracts[0].x_mag >= 0
-
-
 def test_safety_round_trip() -> None:
     path = (
         _CONTRACTS / "discrete" / "safety" / "safety_corridor_contracts.json"
@@ -62,20 +56,11 @@ def test_safety_round_trip() -> None:
     assert restored.nn_input_lower == original.nn_input_lower
 
 
-def test_liveness_round_trip() -> None:
-    path = _CONTRACTS / "discrete" / "liveness" / "liveness_contracts.json"
-    original = AcasLivenessContract.load_json(path)[0]
-    restored = AcasLivenessContract.from_dict(original.to_dict())
-    assert restored.contract_id == original.contract_id
-    assert restored.required_advisory == original.required_advisory
-    assert restored.x_mag == original.x_mag
-    assert restored.y_mag == original.y_mag
-    assert restored.nn_input_upper == original.nn_input_upper
-
-
 def test_crown_input_bounds() -> None:
-    path = _CONTRACTS / "discrete" / "liveness" / "liveness_contracts.json"
-    contract = AcasLivenessContract.load_json(path)[0]
+    path = (
+        _CONTRACTS / "discrete" / "safety" / "safety_corridor_contracts.json"
+    )
+    contract = AcasSafetyContract.load_json(path)[0]
     lower, upper = contract.crown_input_bounds()
     assert lower == contract.nn_input_lower
     assert upper == contract.nn_input_upper

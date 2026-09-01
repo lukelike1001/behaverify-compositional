@@ -3,13 +3,14 @@ acas_contract.py
 
 Typed A/G contract specs for ACAS Xu.
 
-AcasSafetyContract   -- NN must NOT select forbidden_advisory (never_selects)
-AcasLivenessContract -- NN must select required_advisory (always_selects / equals)
+AcasSafetyContract -- NN must NOT select forbidden_advisory (never_selects)
 
-Specs live in separate JSON files (do not mix kinds in one list):
+ACAS Xu has no liveness specification, so there is no second contract kind
+here; see contracts/discrete/liveness/DISCLAIMER.md.
+
+Specs live under:
   contracts/discrete/safety/safety_full_contracts.json
   contracts/discrete/safety/safety_corridor_contracts.json
-  contracts/discrete/liveness/liveness_contracts.json
 
 Pure data + serialization. One instance = one JSON object under "contracts".
 CROWN execution stays on AcasSafetyContractVerifier.
@@ -140,88 +141,6 @@ class AcasSafetyContract(AcasContract):
         extra_meta: dict[str, Any] | None = None,
     ) -> None:
         """Write a safety specs file from a list of contracts."""
-        payload: dict[str, Any] = {
-            "description": description,
-            "contracts": [contract.to_dict() for contract in contracts],
-        }
-        if extra_meta:
-            payload.update(extra_meta)
-        out = Path(path)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        with open(out, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2)
-            handle.write("\n")
-
-
-@dataclass
-class AcasLivenessContract(AcasContract):
-    """
-    Liveness / determinism pin: at this lattice point, NN always selects
-    required_advisory.
-    """
-
-    required_advisory: str = ""
-    required_advisory_idx: int = 0
-    x_mag: int = 0
-    y_mag: int = 0
-    role: str = "liveness"
-    contract_type: str = "equals"
-
-    def to_dict(self) -> dict[str, Any]:
-        record = self._base_dict()
-        record.update({
-            "type": self.contract_type,
-            "guarantee_type": "equals",
-            "role": self.role,
-            "required_advisory": self.required_advisory,
-            "required_advisory_idx": self.required_advisory_idx,
-            "n_states_covered": 1,
-            "dangerous_xy": [[self.x_mag, self.y_mag]],
-        })
-        return record
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> AcasLivenessContract:
-        """Build one liveness contract from one JSON object."""
-        dangerous = data.get("dangerous_xy") or [[0, 0]]
-        x_mag = int(dangerous[0][0])
-        y_mag = int(dangerous[0][1])
-        return cls(
-            contract_id=int(data["id"]),
-            a_prev=str(data["a_prev"]),
-            network_idx=int(data["network_idx"]),
-            onnx=str(data["onnx"]),
-            heading_own_var=int(data["heading_own_var"]),
-            x_sign=int(data["x_sign"]),
-            y_sign=int(data["y_sign"]),
-            nn_input_lower=[float(v) for v in data["nn_input_lower"]],
-            nn_input_upper=[float(v) for v in data["nn_input_upper"]],
-            description=str(data.get("description", "")),
-            required_advisory=str(data["required_advisory"]),
-            required_advisory_idx=int(data["required_advisory_idx"]),
-            x_mag=x_mag,
-            y_mag=y_mag,
-            role=str(data.get("role", "liveness")),
-            contract_type=str(data.get("type", "equals")),
-        )
-
-    @classmethod
-    def load_json(cls, path: Path | str) -> list[AcasLivenessContract]:
-        """Load a liveness-only specs file. Returns a list."""
-        with open(path, encoding="utf-8") as handle:
-            payload = json.load(handle)
-        raw_list = payload["contracts"] if isinstance(payload, dict) else payload
-        return [cls.from_dict(item) for item in raw_list]
-
-    @staticmethod
-    def dump_json(
-        contracts: list[AcasLivenessContract],
-        path: Path | str,
-        *,
-        description: str = "",
-        extra_meta: dict[str, Any] | None = None,
-    ) -> None:
-        """Write a liveness specs file from a list of contracts."""
         payload: dict[str, Any] = {
             "description": description,
             "contracts": [contract.to_dict() for contract in contracts],

@@ -3,7 +3,8 @@ acas_safety_contract_verifier.py
 
 Safety-side ACAS façade: discharge AcasSafetyContract via alpha-beta-CROWN.
 
-Uses CrownVerifier under the hood. Liveness (equals pins) is a separate track.
+Uses CrownVerifier under the hood. Never-select is the only guarantee kind
+ACAS Xu uses.
 
   - continuous: one never-selects call on the range box
   - discrete: one never-selects call per dangerous lattice point (short-circuit UNSAT)

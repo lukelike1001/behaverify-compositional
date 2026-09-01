@@ -52,16 +52,6 @@ _SUCC = _KERNEL.successors
 _ADVISORIES = list(DOMAIN.advisories)
 _R_BY_APREV = AcasReachableSet.compute(DOMAIN).physical_by_aprev()
 
-# Ground-truth trajectory: precomputed by acas_lasso_trajectory.py --dump, since it
-# requires onnxruntime + real inference -- a heavier dependency than the rest of this
-# app needs. Loaded as plain JSON; empty list (feature quietly unavailable) if missing.
-_LASSO_PATH = _ROOT / "core" / "liveness" / "acas_lasso_trajectory.json"
-if _LASSO_PATH.exists():
-    with open(_LASSO_PATH, encoding="utf-8") as f:
-        _LASSO_STATES = [(tuple(s), a) for s, a in json.load(f)]
-else:
-    _LASSO_STATES = []
-
 
 # Hover tooltip text shown in the contract details HTML table.
 _FIELD_TOOLTIPS: dict[str, str] = {
@@ -365,7 +355,6 @@ def _draw_physical_original(
     a_prev: str,
     reachability_choice: str = "Off",
     highlight_br: bool = False,
-    show_lasso: bool = False,
 ) -> go.Figure:
     """
     Panel 1 — Original physical space.
@@ -471,20 +460,6 @@ def _draw_physical_original(
                 mode="markers",
                 marker=dict(symbol="star", size=22, color="gold", line=dict(color="black", width=1.2)),
                 name=f"B_R = ∂V∩R ({len(br_here)})",
-            ))
-
-    # --- True trajectory (Reach_true) markers ---
-    if show_lasso:
-        lasso_here = [(s[0], s[1]) for s, _ap in _LASSO_STATES
-                      if s[2] == x_sign and s[3] == y_sign and s[4] == heading_own_var]
-        if lasso_here:
-            fig.add_trace(go.Scatter(
-                x=[x_sign * xm for xm, ym in lasso_here], y=[y_sign * ym for xm, ym in lasso_here],
-                mode="markers",
-                marker=dict(symbol="diamond", size=16, color="#8e44ad", line=dict(color="black", width=1.0)),
-                name=f"Reach_true ({len(lasso_here)})",
-                text=[f"Reach_true: ({xm},{ym})" for xm, ym in lasso_here],
-                hoverinfo="text",
             ))
 
     sign_x = "+" if x_sign == 1 else "−"
@@ -629,7 +604,6 @@ def render(
     aprev_label: str,
     reachability_choice: str,
     highlight_br: bool,
-    show_lasso: bool,
 ) -> tuple:
     """Return (fig_orig, fig_nn, html, region_html, cell_detail) for the five Gradio
     panels. cell_detail resets to the placeholder whenever the slice changes, so an
@@ -643,7 +617,7 @@ def render(
         contract,
         heading_own_var=slice_heading, x_sign=slice_x_sign, y_sign=slice_y_sign,
         a_prev=a_prev,
-        reachability_choice=reachability_choice, highlight_br=highlight_br, show_lasso=show_lasso,
+        reachability_choice=reachability_choice, highlight_br=highlight_br,
     )
 
     reachable_here = _R_BY_APREV.get(a_prev, frozenset())
@@ -776,8 +750,6 @@ def build_ui() -> gr.Blocks:
                     info="Depends on a_prev above")
                 br_cb = gr.Checkbox(
                     value=True, label="Highlight reachable boundary (B_R = ∂V ∩ R)")
-                lasso_cb = gr.Checkbox(
-                    value=False, label="Show true trajectory markers (Reach_true)")
                 region_info_html = gr.HTML()
 
             # ── Right column: panel 1 (flagship view) + click-grid side by side, then 3+4 ──
@@ -826,7 +798,7 @@ def build_ui() -> gr.Blocks:
         render_inputs = [
             contract_dd, mode_radio, eps_sl, labels_cb,
             heading_sl, quadrant_dd, aprev_dd,
-            reachability_radio, br_cb, lasso_cb,
+            reachability_radio, br_cb,
         ]
         for ctrl in render_inputs:
             ctrl.change(
