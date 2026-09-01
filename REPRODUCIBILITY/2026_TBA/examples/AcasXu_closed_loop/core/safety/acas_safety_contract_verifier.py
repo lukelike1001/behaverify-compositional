@@ -13,9 +13,9 @@ Configuration: acas_verifier_params.yaml
 
 Usage (from AcasXu_closed_loop/):
 
-    python3 acas_safety_contract_verifier.py
-    python3 acas_safety_contract_verifier.py --limit 5
-    python3 acas_safety_contract_verifier.py --discrete --network-idx 1
+    python3 -m core.safety.acas_safety_contract_verifier
+    python3 -m core.safety.acas_safety_contract_verifier --limit 5
+    python3 -m core.safety.acas_safety_contract_verifier --discrete --network-idx 1
 """
 
 from __future__ import annotations

@@ -69,9 +69,9 @@ def main() -> None:
 
     python = args.python
     inductive = _SCRIPTS_DISCRETE / "run_acas_inductive_invariant_check.py"
-    verifier = (
-        _EXAMPLE / "core/safety/acas_safety_contract_verifier.py"
-    )
+    # Invoked as a module: it lives inside the core package and imports
+    # core.paths, so a bare script path would not resolve `core`.
+    verifier_module = "core.safety.acas_safety_contract_verifier"
     safety_pipeline = _SCRIPTS_DISCRETE / "run_acas_safety_pipeline.py"
 
     _run(
@@ -83,7 +83,7 @@ def main() -> None:
         "[2/3] CROWN CERTIFICATE (Q2, operative seed contract)",
         [
             python,
-            str(verifier),
+            "-m", verifier_module,
             "--point",
             "--advisory", "clear",
             "--forbidden", "strong_right",

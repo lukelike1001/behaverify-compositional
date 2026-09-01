@@ -79,7 +79,7 @@ AcasXu_closed_loop/
 │   ├── acas_tree_parameter_extractor.py # YAML refresh from template constants
 │   ├── acas_model_params.yaml           # Single source of truth (physics + catalogs)
 │   ├── acas_verifier_params.yaml        # CROWN + SMV variable names
-│   ├── safety/                          # Safety generator / verifier / classifier
+│   ├── safety/                          # Generator, CROWN verifier, min-cut, ONNX oracle
 │   └── liveness/                        # DISCLAIMER.md only (see above)
 ├── scripts/
 │   ├── run_acas_monolithic_pipeline.py  # Baseline (NNs stay in the SMV)

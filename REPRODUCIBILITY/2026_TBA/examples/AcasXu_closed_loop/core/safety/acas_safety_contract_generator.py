@@ -10,9 +10,9 @@ No CROWN.
 
 Usage (from AcasXu_closed_loop/):
 
-    python3 acas_safety_contract_generator.py
-    python3 acas_safety_contract_generator.py --eps 1e-4 --output path/to/specs.json
-    python3 acas_safety_contract_generator.py --dry-run
+    python3 -m core.safety.acas_safety_contract_generator
+    python3 -m core.safety.acas_safety_contract_generator --eps 1e-4 --output path/to/specs.json
+    python3 -m core.safety.acas_safety_contract_generator --dry-run
 """
 
 from __future__ import annotations
