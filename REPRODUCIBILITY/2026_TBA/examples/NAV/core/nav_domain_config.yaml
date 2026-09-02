@@ -1,0 +1,46 @@
+# NAV domain configuration (ARCH-COMP 2025 AINNCS, Section 3.11).
+#
+# The plant is continuous, so the monolithic table approach requires a lattice.
+# Every real value below is stored as round(value * scale) in the .tree model.
+#
+# Resolution is not free to choose: one control period changes speed and angle
+# by at most |u| * dt = 0.2, so a lattice coarser than 0.2 freezes the robot
+# (verified: at scale 2 the trajectory never leaves the initial cell).
+# scale = 5 is therefore the coarsest lattice on which the closed loop still
+# reaches the goal.
+
+lattice:
+  scale: 5            # integer units per unit of state; resolution = 1/scale
+  dt_num: 1           # control period 0.2 s = dt_num / dt_den
+  dt_den: 5
+
+# Bounds of the modelled box, in real units. Chosen to contain every state the
+# real closed loop visits (measured: x1 [-0.2, 3.1], x2 [-0.7, 3.1],
+# x3 [-2.2, 0.1], x4 [-1.0, 2.0]) with margin.
+bounds:
+  x1: [-1.0, 4.0]     # position, horizontal
+  x2: [-1.0, 4.0]     # position, vertical
+  x3: [-3.0, 1.0]     # speed
+  x4: [-2.0, 3.0]     # heading angle (radians)
+
+initial_state:        # ARCH-COMP: x1,x2 in [2.9,3.1]; we take the midpoint
+  x1: 3.0
+  x2: 3.0
+  x3: 0.0
+  x4: 0.0
+
+obstacle:             # must never be entered
+  x1: [1.0, 2.0]
+  x2: [1.0, 2.0]
+
+goal:                 # must be reached
+  x1: [-0.5, 0.5]
+  x2: [-0.5, 0.5]
+
+horizon_steps: 30     # 6 s at 0.2 s per control period
+
+trig_scale: 1000      # cos/sin lookup tables stored as round(value * trig_scale)
+
+networks:
+  point: ../networks/nn-nav-point-lattice-s5.onnx
+  set:   ../networks/nn-nav-set-lattice-s5.onnx
