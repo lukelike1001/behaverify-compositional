@@ -122,6 +122,18 @@ def _region_condition(
     return condition
 
 
+def _containment_condition(lattice_bounds: dict[str, tuple[int, int]]) -> str:
+    """State stays strictly inside the modelled box, so clamping never fires."""
+    clauses = []
+    for axis, (low, high) in lattice_bounds.items():
+        clauses.append(f"(gt, {axis}, {low})")
+        clauses.append(f"(lt, {axis}, {high})")
+    condition = clauses[0]
+    for clause in clauses[1:]:
+        condition = f"(and, {condition}, {clause})"
+    return condition
+
+
 def build_tree(domain: NavDomain, network_key: str) -> str:
     """Render the whole .tree file as text."""
     onnx_path = domain.networks[network_key]
@@ -139,17 +151,44 @@ def build_tree(domain: NavDomain, network_key: str) -> str:
     # multiply by dt_num. Heading indexes the table from its lower bound.
     heading_index = f"(sub, x4, {x4_lo})"
     divisor = domain.trig_scale * domain.dt_den
-    step_x1 = (
-        f"(idiv, (mult, (mult, x3, (index, cos_table, {heading_index})), "
-        f"{domain.dt_num}), {divisor})"
-    )
-    step_x2 = (
-        f"(idiv, (mult, (mult, x3, (index, sin_table, {heading_index})), "
-        f"{domain.dt_num}), {divisor})"
-    )
+    half = divisor // 2
+
+    def _numerator(table: str) -> str:
+        return (
+            f"(mult, (mult, x3, (index, {table}, {heading_index})), "
+            f"{domain.dt_num})"
+        )
+
+    def _position_update(axis: str, table: str, lo: int, hi: int) -> str:
+        """
+        Clamped position update with round-half-away-from-zero.
+
+        idiv truncates toward zero, which biases every step against motion:
+        with plain truncation the discretised loop reaches the goal from 0 of 9
+        initial states, versus 6 of 9 once the division is rounded. The bias is
+        removed by shifting the numerator half a divisor in its own direction
+        before dividing.
+        """
+        num = _numerator(table)
+        rounded_pos = f"(idiv, (add, {num}, {half}), {divisor})"
+        rounded_neg = f"(idiv, (sub, {num}, {half}), {divisor})"
+        clamp = lambda step: (
+            f"(max, {lo}, (min, {hi}, (add, {axis}, {step})))"
+        )
+        return (
+            f"\n\tcase {{(gte, {num}, 0)}} result {{{clamp(rounded_pos)}}}"
+            f"\n\tresult {{{clamp(rounded_neg)}}}"
+        )
+
+    update_x1 = _position_update("x1", "cos_table", x1_lo, x1_hi)
+    update_x2 = _position_update("x2", "sin_table", x2_lo, x2_hi)
 
     obstacle_condition = _region_condition(domain, domain.obstacle)
     goal_condition = _region_condition(domain, domain.goal)
+    containment_condition = _containment_condition(
+        {"x1": (x1_lo, x1_hi), "x2": (x2_lo, x2_hi),
+         "x3": (x3_lo, x3_hi), "x4": (x4_lo, x4_hi)},
+    )
 
     return f"""configuration {{
     #{{ NAV benchmark, ARCH-COMP 2025 AINNCS Section 3.11. }}#
@@ -164,6 +203,14 @@ constants {{
 
 variables {{
     variable {{ bl step VAR [0, horizon] assign{{result{{0}}}}}}
+    #{{ The control is latched into the blackboard during the tick so the
+       environment update sees one consistent pre-tick state. Reading the
+       NEURAL variable directly from environment_update makes BehaVerify
+       resolve the dependency through staging and evaluate the network on
+       mixed stage_0 / stage_1 inputs. Grid world latches `network` into
+       `current_action` for the same reason. }}#
+    variable {{ bl u1 VAR [-1, 1] assign{{result{{0}}}}}}
+    variable {{ bl u2 VAR [-1, 1] assign{{result{{0}}}}}}
     variable {{ env x1 VAR [{x1_lo}, {x1_hi}] assign{{result{{{domain.to_lattice(domain.initial_state['x1'])}}}}}}}
     variable {{ env x2 VAR [{x2_lo}, {x2_hi}] assign{{result{{{domain.to_lattice(domain.initial_state['x2'])}}}}}}}
     variable {{ env x3 VAR [{x3_lo}, {x3_hi}] assign{{result{{{domain.to_lattice(domain.initial_state['x3'])}}}}}}}
@@ -190,19 +237,21 @@ variables {{
 environment_update {{
     variable_statement {{
 	x1
-	assign {{ result {{(max, {x1_lo}, (min, {x1_hi}, (add, x1, {step_x1})))}} }}
+	assign {{{update_x1}
+	}}
     }}
     variable_statement {{
 	x2
-	assign {{ result {{(max, {x2_lo}, (min, {x2_hi}, (add, x2, {step_x2})))}} }}
+	assign {{{update_x2}
+	}}
     }}
     variable_statement {{
 	x3
-	assign {{ result {{(max, {x3_lo}, (min, {x3_hi}, (add, x3, (index, control, 0))))}} }}
+	assign {{ result {{(max, {x3_lo}, (min, {x3_hi}, (add, x3, u1)))}} }}
     }}
     variable_statement {{
 	x4
-	assign {{ result {{(max, {x4_lo}, (min, {x4_hi}, (add, x4, (index, control, 1))))}} }}
+	assign {{ result {{(max, {x4_lo}, (min, {x4_hi}, (add, x4, u2)))}} }}
     }}
 }} end_environment_update
 
@@ -234,10 +283,18 @@ actions {{
 	advance
 	arguments{{}}
 	local_variables {{}} end_local_variables
-	read_variables {{step}} end_read_variables
-	write_variables {{step}} end_write_variables
+	read_variables {{step, control}} end_read_variables
+	write_variables {{step, u1, u2}} end_write_variables
 	initial_values {{}} end_initial_values
 	update {{
+	    variable_statement {{
+		u1
+		assign{{result{{(index, control, 0)}}}}
+	    }}
+	    variable_statement {{
+		u2
+		assign{{result{{(index, control, 1)}}}}
+	    }}
 	    variable_statement {{
 		step
 		assign{{result{{(min, horizon, (add, step, 1))}}}}
@@ -272,9 +329,15 @@ specifications {{
     INVARSPEC {{
 	(not, {obstacle_condition})
     }}
-    #{{ Bounded reach: the goal region is entered within the horizon. }}#
+    #{{ Reach: the goal region is entered. }}#
     CTLSPEC {{
 	(always_finally, {goal_condition})
+    }}
+    #{{ The modelled box is an assumption, and the environment update clamps at
+       its edge. Clamping would silently keep an escaping robot inside, so the
+       box is only sound if the state never reaches the boundary. }}#
+    INVARSPEC {{
+	{containment_condition}
     }}
 }} end_specifications
 """
