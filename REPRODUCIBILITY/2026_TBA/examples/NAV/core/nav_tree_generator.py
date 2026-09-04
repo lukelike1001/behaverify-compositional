@@ -67,7 +67,7 @@ class NavDomain:
     # --- lattice helpers ---------------------------------------------------
 
     def to_lattice(self, value: float) -> int:
-        return round(value * self.scale)
+        return _round_half_away(value * self.scale)
 
     def bound_ints(self, name: str) -> tuple[int, int]:
         low, high = self.bounds[name]
@@ -88,9 +88,22 @@ class NavDomain:
         """cos or sin over the heading lattice, scaled to integers."""
         low, high = self.bound_ints("x4")
         return [
-            round(fn(index / self.scale) * self.trig_scale)
+            _round_half_away(fn(index / self.scale) * self.trig_scale)
             for index in range(low, high + 1)
         ]
+
+
+def _round_half_away(value: float) -> int:
+    """
+    Round half away from zero.
+
+    Python's round() is half-to-even, so round(2.9 * 5) = round(14.5) = 14 and
+    the state 2.9 would be stored as 2.8 -- a shift of one cell toward the
+    obstacle. The position update already rounds half away from zero, so the
+    lattice mapping and the trig table must use the same convention or the
+    model mixes two.
+    """
+    return int(math.floor(value + 0.5)) if value >= 0 else int(math.ceil(value - 0.5))
 
 
 def _static_int_array(name: str, values: list[int]) -> str:
@@ -108,14 +121,36 @@ def _static_int_array(name: str, values: list[int]) -> str:
 
 
 def _region_condition(
-    domain: NavDomain, region: dict[str, tuple[float, float]],
+    domain: NavDomain, region: dict[str, tuple[float, float]], *, outward: bool,
 ) -> str:
-    """Prefix-notation conjunction saying the position is inside `region`."""
+    """
+    Prefix-notation conjunction saying the position is inside `region`.
+
+    A real interval rarely lands on lattice points, so the direction of the
+    rounding decides which way the model errs, and the two regions need
+    opposite directions to stay conservative:
+
+      obstacle (outward=True)  -- model a LARGER box, so avoiding the modelled
+                                  obstacle implies avoiding the real one.
+      goal     (outward=False) -- model a SMALLER box, so reaching the modelled
+                                  goal implies reaching the real one.
+
+    Rounding both with the same convention is unsound in one of the two. Half
+    away from zero maps the goal [-0.5, 0.5] to lattice [-3, 3] = [-0.6, 0.6],
+    which is larger than the real goal and would accept states outside it.
+    """
     clauses = []
     for axis in ("x1", "x2"):
         low, high = region[axis]
-        clauses.append(f"(gte, {axis}, {domain.to_lattice(low)})")
-        clauses.append(f"(lte, {axis}, {domain.to_lattice(high)})")
+        scaled_low, scaled_high = low * domain.scale, high * domain.scale
+        if outward:
+            lattice_low = math.floor(scaled_low)
+            lattice_high = math.ceil(scaled_high)
+        else:
+            lattice_low = math.ceil(scaled_low)
+            lattice_high = math.floor(scaled_high)
+        clauses.append(f"(gte, {axis}, {lattice_low})")
+        clauses.append(f"(lte, {axis}, {lattice_high})")
     condition = clauses[0]
     for clause in clauses[1:]:
         condition = f"(and, {condition}, {clause})"
@@ -176,6 +211,7 @@ def build_tree(domain: NavDomain, network_key: str) -> str:
             f"(max, {lo}, (min, {hi}, (add, {axis}, {step})))"
         )
         return (
+            f"\n\tcase {{(not, apply_plant)}} result {{{axis}}}"
             f"\n\tcase {{(gte, {num}, 0)}} result {{{clamp(rounded_pos)}}}"
             f"\n\tresult {{{clamp(rounded_neg)}}}"
         )
@@ -183,8 +219,10 @@ def build_tree(domain: NavDomain, network_key: str) -> str:
     update_x1 = _position_update("x1", "cos_table", x1_lo, x1_hi)
     update_x2 = _position_update("x2", "sin_table", x2_lo, x2_hi)
 
-    obstacle_condition = _region_condition(domain, domain.obstacle)
-    goal_condition = _region_condition(domain, domain.goal)
+    obstacle_condition = _region_condition(
+        domain, domain.obstacle, outward=True,
+    )
+    goal_condition = _region_condition(domain, domain.goal, outward=False)
     containment_condition = _containment_condition(
         {"x1": (x1_lo, x1_hi), "x2": (x2_lo, x2_hi),
          "x3": (x3_lo, x3_hi), "x4": (x4_lo, x4_hi)},
@@ -211,6 +249,12 @@ variables {{
        `current_action` for the same reason. }}#
     variable {{ bl u1 VAR [-1, 1] assign{{result{{0}}}}}}
     variable {{ bl u2 VAR [-1, 1] assign{{result{{0}}}}}}
+    #{{ environment_update runs on every tick regardless of the tree, so the
+       plant must be gated explicitly or it keeps flying past the horizon.
+       Gating on the step counter does not work: `step < horizon` drops the
+       last control period, and `step <= horizon` never stops because `step`
+       saturates. Gate on whether THIS tick actually applied a control. }}#
+    variable {{ bl apply_plant VAR BOOLEAN assign{{result{{False}}}}}}
     variable {{ env x1 VAR [{x1_lo}, {x1_hi}] assign{{result{{{domain.to_lattice(domain.initial_state['x1'])}}}}}}}
     variable {{ env x2 VAR [{x2_lo}, {x2_hi}] assign{{result{{{domain.to_lattice(domain.initial_state['x2'])}}}}}}}
     variable {{ env x3 VAR [{x3_lo}, {x3_hi}] assign{{result{{{domain.to_lattice(domain.initial_state['x3'])}}}}}}}
@@ -247,11 +291,17 @@ environment_update {{
     }}
     variable_statement {{
 	x3
-	assign {{ result {{(max, {x3_lo}, (min, {x3_hi}, (add, x3, u1)))}} }}
+	assign {{
+	case {{(not, apply_plant)}} result {{x3}}
+	result {{(max, {x3_lo}, (min, {x3_hi}, (add, x3, u1)))}}
+	}}
     }}
     variable_statement {{
 	x4
-	assign {{ result {{(max, {x4_lo}, (min, {x4_hi}, (add, x4, u2)))}} }}
+	assign {{
+	case {{(not, apply_plant)}} result {{x4}}
+	result {{(max, {x4_lo}, (min, {x4_hi}, (add, x4, u2)))}}
+	}}
     }}
 }} end_environment_update
 
@@ -273,9 +323,13 @@ actions {{
 	arguments{{}}
 	local_variables {{}} end_local_variables
 	read_variables {{}} end_read_variables
-	write_variables {{}} end_write_variables
+	write_variables {{apply_plant}} end_write_variables
 	initial_values {{}} end_initial_values
 	update {{
+	    variable_statement {{
+		apply_plant
+		assign{{result{{False}}}}
+	    }}
 	    return_statement {{ result {{success}} end_result }} end_return_statement
 	}} end_update
     }}
@@ -284,9 +338,13 @@ actions {{
 	arguments{{}}
 	local_variables {{}} end_local_variables
 	read_variables {{step, control}} end_read_variables
-	write_variables {{step, u1, u2}} end_write_variables
+	write_variables {{step, u1, u2, apply_plant}} end_write_variables
 	initial_values {{}} end_initial_values
 	update {{
+	    variable_statement {{
+		apply_plant
+		assign{{result{{True}}}}
+	    }}
 	    variable_statement {{
 		u1
 		assign{{result{{(index, control, 0)}}}}
@@ -329,7 +387,17 @@ specifications {{
     INVARSPEC {{
 	(not, {obstacle_condition})
     }}
-    #{{ Reach: the goal region is entered. }}#
+    #{{ Reach, as the benchmark states it: in the goal AT t = 6. With the plant
+       frozen at the horizon this is exactly the ARCH-COMP property.
+
+       Note AF(goal) is NOT a strengthening of this -- after the freeze it says
+       only that some sample in [0, 6] was in the goal, so a trajectory that
+       clips the goal at t = 4 and leaves satisfies AF and fails this. It is
+       emitted below as a separate, strictly weaker "visited the goal" check. }}#
+    INVARSPEC {{
+	(implies, (eq, step, horizon), {goal_condition})
+    }}
+    #{{ WEAKER than the invariant above: visited the goal at some sample. }}#
     CTLSPEC {{
 	(always_finally, {goal_condition})
     }}

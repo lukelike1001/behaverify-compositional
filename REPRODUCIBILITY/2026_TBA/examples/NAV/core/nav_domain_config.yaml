@@ -14,14 +14,22 @@ lattice:
   dt_num: 1           # control period 0.2 s = dt_num / dt_den
   dt_den: 5
 
-# Bounds of the modelled box, in real units. Chosen to contain every state the
-# real closed loop visits (measured: x1 [-0.2, 3.1], x2 [-0.7, 3.1],
-# x3 [-2.2, 0.1], x4 [-1.0, 2.0]) with margin.
+# Bounds of the modelled box, in real units.
+#
+# Sized from the envelope of the lattice closed loop over the initial set, plus
+# one cell of margin. The box is an ASSUMPTION: environment_update clamps at its
+# edge, and clamping would silently keep an escaping robot inside. The generated
+# model therefore carries a strict-interior INVARSPEC, so the assumption is
+# discharged rather than hidden -- if the state ever reaches the boundary that
+# specification fails and the box, not the controller, is wrong.
+#
+# These bounds give 198,375 table entries, the figure reported in
+# reports/NAV/2026_09_03_monolithic_first_run.md section 6.
 bounds:
-  x1: [-1.0, 4.0]     # position, horizontal
-  x2: [-1.0, 4.0]     # position, vertical
-  x3: [-3.0, 1.0]     # speed
-  x4: [-2.0, 3.0]     # heading angle (radians)
+  x1: [-1.0, 3.4]     # position, horizontal
+  x2: [-1.0, 3.4]     # position, vertical
+  x3: [-2.4, 0.4]     # speed
+  x4: [-1.2, 3.6]     # heading angle (radians)
 
 initial_state:        # ARCH-COMP: x1,x2 in [2.9,3.1]; we take the midpoint
   x1: 3.0
