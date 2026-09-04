@@ -9,8 +9,23 @@
 # scale = 5 is therefore the coarsest lattice on which the closed loop still
 # reaches the goal.
 
+# Three independent lattices. Sharing one scale conflated two separate
+# decisions -- "can the robot take a step" (position) and "how many control
+# levels does the plant see" (speed and heading) -- because the control delta
+# is round(u * scale * dt), so scale and control resolution moved together.
+#
+#   position_scale  cell size for x1, x2; too coarse and the robot cannot move
+#   speed_scale     control levels for u1 are +/- round(speed_scale * dt)
+#   heading_scale   control levels for u2 are +/- round(heading_scale * dt)
+#                   and it also indexes the cos/sin tables
+#
+# At speed_scale = 5 and dt = 0.2 the product is 1, i.e. a THREE-level
+# controller. Raising it is what makes the plant see the tanh network rather
+# than a bang-bang approximation of it.
 lattice:
-  scale: 5            # integer units per unit of state; resolution = 1/scale
+  position_scale: 5
+  speed_scale: 5
+  heading_scale: 5
   dt_num: 1           # control period 0.2 s = dt_num / dt_den
   dt_den: 5
 
@@ -49,6 +64,20 @@ horizon_steps: 30     # 6 s at 0.2 s per control period
 
 trig_scale: 1000      # cos/sin lookup tables stored as round(value * trig_scale)
 
+# Which controllers exist. Wrapper filenames are derived from the scales above
+# by core.nav_wrapper_builder, so these are just the names.
 networks:
-  point: ../networks/nn-nav-point-lattice-s5.onnx
-  set:   ../networks/nn-nav-set-lattice-s5.onnx
+  point: point
+  set:   set
+
+# Position successor relation.
+#
+#   deterministic  round the Euler increment to one lattice point. Fast, but
+#                  the model is neither an over- nor an under-approximation of
+#                  the plant, so a TRUE verdict licenses almost nothing.
+#   interval       assign nondeterministically over {floor, ceil} of the exact
+#                  increment, so the successor covers every rounding. TRUE then
+#                  means the property holds for all of them -- an actual
+#                  over-approximation claim, though only of Euler-from-centre
+#                  rounding, not of the cell around the centre.
+successor: deterministic

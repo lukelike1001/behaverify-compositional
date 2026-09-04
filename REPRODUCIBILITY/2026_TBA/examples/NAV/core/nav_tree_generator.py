@@ -36,7 +36,9 @@ DEFAULT_CONFIG = Path(__file__).resolve().parent / "nav_domain_config.yaml"
 class NavDomain:
     """Lattice, bounds, and specification regions for the NAV benchmark."""
 
-    scale: int
+    position_scale: int
+    speed_scale: int
+    heading_scale: int
     dt_num: int
     dt_den: int
     trig_scale: int
@@ -46,13 +48,16 @@ class NavDomain:
     goal: dict[str, tuple[float, float]]
     horizon_steps: int
     networks: dict[str, str]
+    successor: str = "deterministic"
 
     @classmethod
     def from_yaml(cls, path: Path = DEFAULT_CONFIG) -> NavDomain:
         cfg: dict[str, Any] = yaml.safe_load(path.read_text())
         lattice = cfg["lattice"]
         return cls(
-            scale=int(lattice["scale"]),
+            position_scale=int(lattice["position_scale"]),
+            speed_scale=int(lattice["speed_scale"]),
+            heading_scale=int(lattice["heading_scale"]),
             dt_num=int(lattice["dt_num"]),
             dt_den=int(lattice["dt_den"]),
             trig_scale=int(cfg["trig_scale"]),
@@ -62,16 +67,49 @@ class NavDomain:
             goal={k: tuple(v) for k, v in cfg["goal"].items()},
             horizon_steps=int(cfg["horizon_steps"]),
             networks=dict(cfg["networks"]),
+            successor=str(cfg.get("successor", "deterministic")),
         )
 
     # --- lattice helpers ---------------------------------------------------
 
-    def to_lattice(self, value: float) -> int:
-        return _round_half_away(value * self.scale)
+    @property
+    def dt(self) -> float:
+        return self.dt_num / self.dt_den
+
+    def scale_for(self, name: str) -> int:
+        """Which lattice an axis lives on."""
+        return {
+            "x1": self.position_scale,
+            "x2": self.position_scale,
+            "x3": self.speed_scale,
+            "x4": self.heading_scale,
+        }[name]
+
+    def to_lattice(self, value: float, name: str) -> int:
+        return _round_half_away(value * self.scale_for(name))
+
+    def control_levels(self, name: str) -> int:
+        """Half-width of the integer control delta on this axis."""
+        return max(1, round(self.scale_for(name) * self.dt))
 
     def bound_ints(self, name: str) -> tuple[int, int]:
         low, high = self.bounds[name]
-        return self.to_lattice(low), self.to_lattice(high)
+        return self.to_lattice(low, name), self.to_lattice(high, name)
+
+    def wrapper_path(self, network: str) -> str:
+        """
+        Wrapper for this scale triple, relative to the tree file.
+
+        The wrapper bakes in all three scales (input Div, output Mul), so a
+        tree and a wrapper from different configurations must never be paired.
+        Encoding the scales in the filename makes a mismatch a missing-file
+        error rather than a silent wrong answer.
+        """
+        return (
+            f"../networks/nn-nav-{network}"
+            f"-p{self.position_scale}v{self.speed_scale}"
+            f"h{self.heading_scale}.onnx"
+        )
 
     def size(self, name: str) -> int:
         low, high = self.bound_ints(name)
@@ -88,7 +126,7 @@ class NavDomain:
         """cos or sin over the heading lattice, scaled to integers."""
         low, high = self.bound_ints("x4")
         return [
-            _round_half_away(fn(index / self.scale) * self.trig_scale)
+            _round_half_away(fn(index / self.heading_scale) * self.trig_scale)
             for index in range(low, high + 1)
         ]
 
@@ -142,7 +180,8 @@ def _region_condition(
     clauses = []
     for axis in ("x1", "x2"):
         low, high = region[axis]
-        scaled_low, scaled_high = low * domain.scale, high * domain.scale
+        axis_scale = domain.scale_for(axis)
+        scaled_low, scaled_high = low * axis_scale, high * axis_scale
         if outward:
             lattice_low = math.floor(scaled_low)
             lattice_high = math.ceil(scaled_high)
@@ -171,8 +210,12 @@ def _containment_condition(lattice_bounds: dict[str, tuple[int, int]]) -> str:
 
 def build_tree(domain: NavDomain, network_key: str) -> str:
     """Render the whole .tree file as text."""
-    onnx_path = domain.networks[network_key]
-    scale = domain.scale
+    onnx_path = domain.wrapper_path(network_key)
+    position_scale = domain.position_scale
+    speed_scale = domain.speed_scale
+    heading_scale = domain.heading_scale
+    u1_levels = domain.control_levels("x3")
+    u2_levels = domain.control_levels("x4")
     x1_lo, x1_hi = domain.bound_ints("x1")
     x2_lo, x2_hi = domain.bound_ints("x2")
     x3_lo, x3_hi = domain.bound_ints("x3")
@@ -184,34 +227,74 @@ def build_tree(domain: NavDomain, network_key: str) -> str:
     # x1' = x1 + x3 * cos(x4) * dt, all on the lattice. cos is stored scaled by
     # trig_scale and dt = dt_num/dt_den, so divide by trig_scale * dt_den and
     # multiply by dt_num. Heading indexes the table from its lower bound.
+    # x1' = x1 + x3 * cos(x4) * dt in real units. On separate lattices the
+    # scales no longer cancel: x1_lat/Sp + (x3_lat/Sv) * cos * dt, so
+    #
+    #     x1_lat' = x1_lat + x3_lat * cos_int * Sp * dt_num
+    #                        / (Sv * trig_scale * dt_den)
+    #
+    # With one shared scale the Sp/Sv factor is 1 and this reduces to the old
+    # expression, which is why the coincidence was easy to miss.
     heading_index = f"(sub, x4, {x4_lo})"
-    divisor = domain.trig_scale * domain.dt_den
+    divisor = speed_scale * domain.trig_scale * domain.dt_den
+    numerator_factor = position_scale * domain.dt_num
     half = divisor // 2
 
     def _numerator(table: str) -> str:
         return (
             f"(mult, (mult, x3, (index, {table}, {heading_index})), "
-            f"{domain.dt_num})"
+            f"{numerator_factor})"
         )
 
     def _position_update(axis: str, table: str, lo: int, hi: int) -> str:
         """
-        Clamped position update with round-half-away-from-zero.
+        Clamped position update, deterministic or interval-valued.
 
-        idiv truncates toward zero, which biases every step against motion:
-        with plain truncation the discretised loop reaches the goal from 0 of 9
-        initial states, versus 6 of 9 once the division is rounded. The bias is
-        removed by shifting the numerator half a divisor in its own direction
-        before dividing.
+        DETERMINISTIC rounds half away from zero. idiv truncates toward zero,
+        which biases every step against motion: with plain truncation the
+        discretised loop reaches the goal from 0 of 9 initial states, versus 6
+        of 9 once rounded. The bias is removed by shifting the numerator half a
+        divisor in its own direction before dividing. The resulting model is a
+        different closed loop, neither over- nor under-approximating the plant.
+
+        INTERVAL assigns nondeterministically over {floor(delta), ceil(delta)},
+        so the successor covers every rounding of the exact Euler increment
+        rather than picking one. INVARSPEC = true then means the property holds
+        for ALL such roundings, which is a real over-approximation claim -- but
+        only of "explicit Euler from the reconstructed cell CENTRE, with the
+        tabulated cos/sin, snapped to the lattice". It does NOT cover the cell
+        around that centre (at scale 5 the cell is 0.2 wide and variation in
+        x3, x4 inside it moves the increment by a few tenths of a cell), and it
+        does not close the sampled-time versus continuous-time gap.
+
+        Truncating division makes floor/ceil sign-dependent:
+            num >= 0:  floor = tdiv(num, D),          ceil = tdiv(num+D-1, D)
+            num <  0:  floor = tdiv(num-D+1, D),      ceil = tdiv(num, D)
+        When delta is exactly integral the two coincide and the choice
+        collapses, so no spurious branching is introduced.
         """
         num = _numerator(table)
-        rounded_pos = f"(idiv, (add, {num}, {half}), {divisor})"
-        rounded_neg = f"(idiv, (sub, {num}, {half}), {divisor})"
         clamp = lambda step: (
             f"(max, {lo}, (min, {hi}, (add, {axis}, {step})))"
         )
+        frozen = f"\n\tcase {{(not, apply_plant)}} result {{{axis}}}"
+
+        if domain.successor == "interval":
+            floor_pos = f"(idiv, {num}, {divisor})"
+            ceil_pos = f"(idiv, (add, {num}, {divisor - 1}), {divisor})"
+            floor_neg = f"(idiv, (sub, {num}, {divisor - 1}), {divisor})"
+            ceil_neg = f"(idiv, {num}, {divisor})"
+            return (
+                f"{frozen}"
+                f"\n\tcase {{(gte, {num}, 0)}} result "
+                f"{{{clamp(floor_pos)}, {clamp(ceil_pos)}}}"
+                f"\n\tresult {{{clamp(floor_neg)}, {clamp(ceil_neg)}}}"
+            )
+
+        rounded_pos = f"(idiv, (add, {num}, {half}), {divisor})"
+        rounded_neg = f"(idiv, (sub, {num}, {half}), {divisor})"
         return (
-            f"\n\tcase {{(not, apply_plant)}} result {{{axis}}}"
+            f"{frozen}"
             f"\n\tcase {{(gte, {num}, 0)}} result {{{clamp(rounded_pos)}}}"
             f"\n\tresult {{{clamp(rounded_neg)}}}"
         )
@@ -230,13 +313,15 @@ def build_tree(domain: NavDomain, network_key: str) -> str:
 
     return f"""configuration {{
     #{{ NAV benchmark, ARCH-COMP 2025 AINNCS Section 3.11. }}#
-    #{{ State is stored on an integer lattice: value * {scale}. }}#
+    #{{ State on three integer lattices: position * {position_scale},
+       speed * {speed_scale}, heading * {heading_scale}.
+       Control deltas: u1 in +/-{u1_levels}, u2 in +/-{u2_levels}. }}#
     neural
 }}
 enumerations {{
 }}
 constants {{
-    scale := {scale}, horizon := {domain.horizon_steps}
+    horizon := {domain.horizon_steps}
 }} end_constants
 
 variables {{
@@ -247,18 +332,18 @@ variables {{
        resolve the dependency through staging and evaluate the network on
        mixed stage_0 / stage_1 inputs. Grid world latches `network` into
        `current_action` for the same reason. }}#
-    variable {{ bl u1 VAR [-1, 1] assign{{result{{0}}}}}}
-    variable {{ bl u2 VAR [-1, 1] assign{{result{{0}}}}}}
+    variable {{ bl u1 VAR [-{u1_levels}, {u1_levels}] assign{{result{{0}}}}}}
+    variable {{ bl u2 VAR [-{u2_levels}, {u2_levels}] assign{{result{{0}}}}}}
     #{{ environment_update runs on every tick regardless of the tree, so the
        plant must be gated explicitly or it keeps flying past the horizon.
        Gating on the step counter does not work: `step < horizon` drops the
        last control period, and `step <= horizon` never stops because `step`
        saturates. Gate on whether THIS tick actually applied a control. }}#
     variable {{ bl apply_plant VAR BOOLEAN assign{{result{{False}}}}}}
-    variable {{ env x1 VAR [{x1_lo}, {x1_hi}] assign{{result{{{domain.to_lattice(domain.initial_state['x1'])}}}}}}}
-    variable {{ env x2 VAR [{x2_lo}, {x2_hi}] assign{{result{{{domain.to_lattice(domain.initial_state['x2'])}}}}}}}
-    variable {{ env x3 VAR [{x3_lo}, {x3_hi}] assign{{result{{{domain.to_lattice(domain.initial_state['x3'])}}}}}}}
-    variable {{ env x4 VAR [{x4_lo}, {x4_hi}] assign{{result{{{domain.to_lattice(domain.initial_state['x4'])}}}}}}}
+    variable {{ env x1 VAR [{x1_lo}, {x1_hi}] assign{{result{{{domain.to_lattice(domain.initial_state['x1'], 'x1')}}}}}}}
+    variable {{ env x2 VAR [{x2_lo}, {x2_hi}] assign{{result{{{domain.to_lattice(domain.initial_state['x2'], 'x2')}}}}}}}
+    variable {{ env x3 VAR [{x3_lo}, {x3_hi}] assign{{result{{{domain.to_lattice(domain.initial_state['x3'], 'x3')}}}}}}}
+    variable {{ env x4 VAR [{x4_lo}, {x4_hi}] assign{{result{{{domain.to_lattice(domain.initial_state['x4'], 'x4')}}}}}}}
 
     #{{ The ONNX wrapper takes lattice ints and returns integer state deltas,
        so the tree passes plain variables. See networks/README.md. }}#
@@ -429,7 +514,16 @@ def main() -> None:
 
     sizes = {n: domain.size(n) for n in ("x1", "x2", "x3", "x4")}
     print(f"wrote {output}")
-    print(f"  lattice resolution = {1 / domain.scale}")
+    print(
+        f"  resolutions        = position {1 / domain.position_scale:.3f}, "
+        f"speed {1 / domain.speed_scale:.3f}, "
+        f"heading {1 / domain.heading_scale:.3f}"
+    )
+    print(
+        f"  control levels     = u1 +/-{domain.control_levels('x3')}, "
+        f"u2 +/-{domain.control_levels('x4')}"
+    )
+    print(f"  successor          = {domain.successor}")
     print(f"  per-axis sizes     = {sizes}")
     print(f"  TABLE ENTRIES      = {domain.table_entries():,}")
 

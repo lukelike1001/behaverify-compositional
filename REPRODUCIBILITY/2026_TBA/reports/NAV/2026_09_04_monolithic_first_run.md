@@ -1,6 +1,6 @@
 # Monolithic NAV (First Run)
 
-**Date:** 2026-09-03
+**Date:** 2026-09-04
 **Baseline (before):** `316067a` — *Match ACAS Xu safety invariant for discrete*
 **Scope:** `examples/NAV/` (new): `core/`, `networks/` wrappers, `tree/`.
 
@@ -17,6 +17,33 @@ not licensed; §7 is the plan to fix it.
 
 An earlier draft of this report claimed the opposite — that monolithic could
 not build the model at all. That was wrong twice over, and §5 records why.
+
+---
+
+## 0. TL;DR
+
+- Monolithic NAV runs: both controllers verify all four specifications in
+  ~60 s, from **198,375** table entries and a **39 MB** SMV.
+- The verdict means little: the lattice model is a *different closed loop*, and
+  **2 of 9** initial-set starts collide with the obstacle while the continuous
+  plant collides from none.
+- Refinement is non-monotone — resolution **0.25** reaches the goal from 9 of 9
+  starts, **0.2** from only 6 of 9 — so finer is not safer.
+- nuXmv needs **11.9 GB** for that 39 MB SMV (~300x), on a 16 GB machine.
+- Doubling the table to double control fidelity is **killed by the OOM killer
+  at 14.6 GB**; the next step up dies too.
+- The unaffordable fidelity is the one that matters: **11 control levels take
+  the `set` controller from 6/9 to 9/9** reaching the goal.
+- Making the successor a sound over-approximation returns **FALSE**, because
+  the rounding interval (one 0.200 cell) is wider than the median per-step
+  motion (**0.076**).
+- Tightening that to 15 % looseness needs **2,970,375** entries — 15x the table
+  that already consumes three quarters of the machine.
+- Margins are thin: the continuous trajectory clears the obstacle by **0.1887**,
+  under one cell, and the `point` controller by **0.0157**.
+
+**Upshot:** monolithic does not fail on NAV, it *approximates* — and every way
+of making the approximation trustworthy costs more memory than the machine has.
 
 ---
 
@@ -351,7 +378,7 @@ committed, so step 1 works without it.
 **A–C are done** (§§5.4–5.7). The remainder is what would turn this into a
 result about faithfulness.
 
-**D. Decouple the position, velocity, and heading scales.** Control fidelity is
+**D — DONE, see §10.** Decouple the position, velocity, and heading scales. Control fidelity is
 governed by `Sv dt`, table size by `Sp^2 Sv Stheta`. Sharing one `S` conflated
 "the robot cannot step" with "the controller is three-level". Run
 `Sv in {5, 10, 25}` at fixed `Sp` as a measurement: `Sv = 25` gives `Sv dt = 5`,
@@ -363,7 +390,7 @@ that is both a network input and the trig index, and coarse `Stheta` is a plant
 error rather than a control error; and the wrapper plus the `u1, u2` domain are
 baked at `S dt = 1`.
 
-**E. Make the successor an over-approximation.** Replace the single rounded
+**E — DONE, see §11.** Make the successor an over-approximation. Replace the single rounded
 position increment with a nondeterministic assignment over the interval it
 spans. This is what would make `INVARSPEC = true` mean something. Scope
 honestly: `{floor, ceil}` of the increment at the cell *centre* is sound only
@@ -384,7 +411,7 @@ opening.
 
 Expect FALSE to be the likely and correct first outcome.
 
-**F. Cover the initial set.** Sound covering means every lattice cell
+**F — DONE, see §11.3.** Cover the initial set. Sound covering means every lattice cell
 intersecting `[2.9,3.1]^2`, not every rounded image of a 3x3 sample. At `S = 5`
 that set is **one cell** (centre 15, `[2.9, 3.1]`), so F adds nothing at the
 current resolution — nondeterministic init over `{14,15,16}^2` would be a
@@ -424,3 +451,191 @@ disagreements in §1.1 came from the same review, and were re-checked here
 against the ONNX graphs, the `.mat` weights, and `dynamics.m`.
 The `apply_plant` gating in 5.6 and the direction-aware region rounding in 5.5
 are refinements that emerged from implementing its recommendations.
+
+
+---
+
+## 10. D: control fidelity is unaffordable
+
+Position, speed, and heading now sit on three independent lattices
+(`position_scale`, `speed_scale`, `heading_scale`). Sharing one scale conflated
+two unrelated decisions, because the control delta is `round(u * S * dt)`: the
+cell size and the number of control levels moved together.
+
+Three things had to change together, and the first is the one that was hiding:
+
+* **The scales no longer cancel in the position update.** With one shared `S`,
+  `x1' = x1 + x3 * cos * dt` needed no scale factor. On separate lattices it is
+  `x1_lat + x3_lat * cos_int * Sp * dt_num / (Sv * trig_scale * dt_den)`. The
+  old expression was correct only by the coincidence `Sp = Sv`.
+* **The wrapper needs vectors, not scalars** — `Div` by `[Sp, Sp, Sv, Sh]` and
+  `Mul` by `[Sv*dt, Sh*dt]`, since speed and heading quantise differently. Built
+  by `core/nav_wrapper_builder.py`, which verifies each wrapper against the
+  original over 1000 lattice points (all report 0 mismatches) and encodes the
+  scales in the filename so a tree can never be paired with a mismatched wrapper.
+* **The `u1, u2` domains follow their own lattices**, `+/-round(S * dt)`.
+
+**Regression check.** At `p5v5h5` the refactor reproduces the committed result
+exactly: 198,375 entries, all four specifications true.
+
+### The measurement
+
+Fixed `Sp = Sh = 5`, varying `Sv`. `set` network, same box.
+
+| `Sv` | u1 levels | Table entries | SMV | nuXmv peak RSS | Verdicts |
+|---|---|---|---|---|---|
+| 5 | ±1 | 198,375 | 39.0 MB | **11.9 GB** | true ×4 in 58 s |
+| 10 | ±2 | 383,525 | 75.6 MB | **14.6 GB** | **SIGKILL — OOM at 133 s** |
+| 25 | ±5 | 938,975 | 185.5 MB | hits a 12 GB cap at 60 s | none |
+
+The machine has 16 GB. **A 39 MB SMV costs nuXmv 11.9 GB** — roughly a 300x
+blow-up — and doubling the table exceeds available memory. `Sv = 5` fits with
+about 4 GB to spare; nothing above it fits at all.
+
+This also reframes §5.1. `ulimit -s unlimited` did not remove a limit, it
+*moved* one: previously nuXmv failed fast at 1.2 GB by overflowing an 8 MB
+stack; afterwards it grows until the kernel kills it. Both are memory ceilings.
+The stack story was the symptom; **memory is the wall**, and it sits just above
+the smallest configuration that runs.
+
+### What the unaffordable fidelity would have bought
+
+Simulated with the generator's exact arithmetic, since nuXmv cannot build these
+models:
+
+| net | `Sv` | u1 levels | goal at t=6 (9 starts) | collides |
+|---|---|---|---|---|
+| `set` | 5 | ±1 | 6 / 9 | 2 / 9 |
+| `set` | 10 | ±2 | 6 / 9 | 2 / 9 |
+| `set` | 25 | ±5 | **9 / 9** | 2 / 9 |
+| `point` | 5 | ±1 | 5 / 9 | 1 / 9 |
+| `point` | 10 | ±2 | 7 / 9 | 1 / 9 |
+| `point` | 25 | ±5 | 5 / 9 | 1 / 9 |
+
+Two things follow.
+
+**The fidelity we cannot afford is exactly the fidelity that fixes the reach
+property.** For `set`, eleven control levels take the discretised loop from
+6 of 9 initial states reaching the goal to **9 of 9** — matching the continuous
+plant. The model that fits in memory is answering a measurably different
+question from the one the benchmark asks.
+
+**Collisions are not a control-quantisation artefact.** The 2/9 collision rate
+is identical at every `Sv`, because it comes from *position* quantisation at
+`Sp = 5` (§2). Removing it means raising `Sp`, which multiplies the table again
+in two dimensions rather than one.
+
+And `point` is non-monotone once more — 5, then 7, then 5 — which is §3 showing
+through: this family of lattices is not a refinement hierarchy.
+
+### Why this is the useful result
+
+Not "monolithic fails on NAV". It runs, at `Sv = 5`, and returns four TRUEs.
+The result is the **shape of the cost**: to make the discretised model faithful
+you must raise both control and position resolution, the table grows as their
+product, and nuXmv's memory is already at 75 % of the machine at the coarsest
+setting that runs at all.
+
+That is the quantity a compositional approach has to beat, and it is a far more
+defensible comparison than a segfault.
+
+
+---
+
+## 11. E and F: the over-approximation is too loose to be affordable
+
+### 11.1 What was built
+
+`successor: interval` in the config replaces the single rounded position
+increment with a nondeterministic assignment over `{floor(delta), ceil(delta)}`.
+BehaVerify's grammar takes `values += code_statement[',']`, so `result {a, b}`
+accepts arbitrary expressions. Truncating division makes the two bounds
+sign-dependent:
+
+```
+num >= 0:  floor = idiv(num, D)          ceil = idiv(num + D - 1, D)
+num <  0:  floor = idiv(num - D + 1, D)  ceil = idiv(num, D)
+```
+
+When the increment is exactly integral the bounds coincide and the branch
+collapses, so no spurious nondeterminism is added.
+
+`INVARSPEC = true` under this successor would mean the property holds for
+**every** rounding of the Euler increment -- a real over-approximation claim.
+Scoped precisely: of *explicit Euler from the reconstructed cell centre, with
+the tabulated cos/sin, snapped to the lattice*. Not of the cell around that
+centre, and not of the continuous flow between samples.
+
+### 11.2 Result: FALSE, and the counterexample is spurious
+
+| | deterministic | interval |
+|---|---|---|
+| Table entries | 198,375 | 198,375 |
+| SMV | 39.0 MB | 39.0 MB |
+| nuXmv peak RSS | 11.9 GB | **13.0 GB (capped)** |
+| Avoid obstacle | true | **false** |
+
+The counterexample moves one cell diagonally per step and reaches the obstacle
+corner `(2.0, 2.0)` in five steps:
+
+```
+t=0 (3.0,3.0)  t=1 (2.8,2.8)  t=2 (2.6,2.6)  t=3 (2.4,2.4)
+t=4 (2.2,2.2)  t=5 (2.0,2.0)  <-- obstacle
+```
+
+That is not a behaviour of the plant. At `t = 0` the true increment is
+`|x3| cos(x4) dt = 0.039`, one fifth of a cell -- but `floor/ceil` permits a
+**full cell** of motion. The over-approximation grants up to a whole cell of
+spurious drift per step per axis, and five steps of it reach the obstacle.
+
+**The looseness is quantifiable.** Along the true trajectory the per-step
+position increment has median 0.076 and maximum 0.333, while a cell at
+`Sp = 5` is 0.200. `floor/ceil` always spans exactly one cell, so its relative
+looseness is `1 / (delta measured in cells)`:
+
+| `Sp` | cell | max delta in cells | looseness at the largest step | table entries |
+|---|---|---|---|---|
+| **5** | 0.200 | 1.7 | **60 %** | 198,375 |
+| 10 | 0.100 | 3.3 | 30 % | 759,375 |
+| 20 | 0.050 | 6.7 | 15 % | 2,970,375 |
+| 40 | 0.025 | 13.3 | 8 % | 11,748,375 |
+
+At the *median* step the looseness exceeds 100 % -- the interval is wider than
+the motion it is meant to bound.
+
+**So E is sound and useless at every resolution monolithic can afford.**
+Tightening it to 15 % needs `Sp = 20`, a 15x larger table than the one that
+already consumes 11.9 GB of a 16 GB machine. The over-approximation only
+becomes informative in a regime nuXmv cannot reach.
+
+### 11.3 F is a no-op at this resolution
+
+Sound covering means every lattice cell intersecting `[2.9, 3.1]^2`, not every
+rounded image of a sample. At `Sp = 5` the cell centred on 15 covers exactly
+`[2.90, 3.10]` -- the initial set **is** one cell. Verified against the
+generator's own mapping. (The endpoint 3.1 maps to cell 16 under half-away
+rounding, which is a boundary artefact of the mapping, not evidence of a second
+cell: 3.1 is the shared face of cells 15 and 16.)
+
+So F adds nothing here. Nondeterministic initialisation over `{14, 15, 16}^2`
+would be a 0.6 x 0.6 box of centres including `(2.8, 3.0)`, which lies outside
+the benchmark's initial set and is one of the colliding starts from §2 -- a
+FALSE from that would be an artefact, not a verdict about NAV. F becomes a real
+experiment only once `Sp` is large enough that the initial set spans several
+cells, which §11.2 shows is unaffordable for the same reason.
+
+### 11.4 What this settles
+
+The obstruction is **discretisation**, not the network encoding. Rounding the
+successor per lattice point forces a choice between a model that is not an
+abstraction at all (deterministic, §3) and one whose over-approximation error
+is comparable to the motion being modelled (interval, above). Both follow from
+representing a continuous plant on a lattice that must be fine enough to move
+and coarse enough to enumerate -- and §10 shows those two requirements already
+fail to overlap by an order of magnitude in memory.
+
+This is the concrete opening for the compositional approach, and it is sharper
+than "monolithic is slow": a contract constrains the network's output over a
+**region**, so a region-based transition relation never pays the per-point
+rounding penalty that makes E useless. Whether that can be built for NAV is
+untested, and it is the next thing to try.
