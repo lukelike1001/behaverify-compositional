@@ -108,6 +108,57 @@ sample-and-hold plus integration of the flow between samples. Sampled-time
 avoidance is weaker than the continuous tube — the same gap NEUS already admits
 for ACAS Xu's 6-second checks.
 
+### 1.2 The paper obligation and the encoding obligation are different
+
+They share names, so they get separate ones here. Everything this report
+measures discharges the **encoding obligation**; nothing in it discharges
+§3.11.
+
+```
+PAPER OBLIGATION (ARCH-COMP 2025 AINNCS 3.11)
+  for all (x1,x2) in [2.9,3.1]^2, x3 = x4 = 0:
+    P1  for all t in [0,6] (the tube):   state not in obstacle
+    P2  at t = 6:                        state in goal
+  plant: sample-and-hold u, flow of (15) integrated between samples
+
+ENCODING OBLIGATION (what we check)
+  for (x1,x2) = (3.0,3.0), x3 = x4 = 0:
+    S1  at k = 0..30 (the samples):      state not in obstacle
+    S2  at k = 30:                       state in goal
+    S4  at k = 0..30:                    state strictly inside the box
+  plant: one forward-Euler step per 0.2 s period, on the integer lattice
+```
+
+Three gaps, none of which the lattice closes:
+
+1. **Quantifier.** `P` quantifies over the initial box; `S` over its midpoint.
+2. **Time domain.** `P1` is a tube, `S1` is 31 samples.
+3. **Plant.** Euler-per-period, not the flow of (15).
+
+`S3` (`AF goal`) appears in the generated model as a diagnostic. It is strictly
+weaker than `S2` and is not a NAV result. `S4` is not in the paper at all — it
+is the price of clamping a finite box, and it exists so the clamp cannot hide a
+violation.
+
+Gaps 2 and 3 are not independent, and gap 3 is not forced. Over one control
+period `u` is held, so `x3(t) = x3 + u1 t` and `x4(t) = x4 + u2 t` are exact,
+and the position integral
+
+```
+integral (a + b t) cos(c + d t) dt
+    = (a + b t) sin(c + d t) / d  +  b cos(c + d t) / d^2
+```
+
+is elementary (with the `d = 0` case taken separately). The sample-to-sample
+map of the *true* closed loop is therefore available in closed form: NAV does
+not need a numerical integrator. Committing to that map removes gap 3. It also
+puts gap 2 within reach: the same closed form gives the position at every `t`
+inside the period, not only at its end, so tube avoidance becomes a test of a
+2-D curve against an axis-aligned square, per period. That is a curve–set
+disjointness question, not a scalar bound; the coordinate-wise version of it is
+the interval hull of the curve and is strictly conservative. Neither is
+attempted here.
+
 ---
 
 ## 2. Why a lattice, and what it costs
