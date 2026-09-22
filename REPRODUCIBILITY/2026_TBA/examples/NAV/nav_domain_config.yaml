@@ -1,0 +1,46 @@
+# nav_domain_config.yaml
+# ARCH-COMP25 AINNCS "Navigation Task" benchmark (report section 3.11).
+#
+# Source of truth for every constant used by core/. Values transcribed from the
+# benchmark description and cross-checked against examples/NAV/README.md and
+# examples/NAV/dynamics.m.
+#
+# NOTE ON STATE ORDER. dynamics.m computes
+#     dx = [x(3)*cos(x(4)); x(3)*sin(x(4)); u(1); u(2)]
+# so the third component is the speed and the fourth is the heading:
+#     state = (x, y, v, theta),  u1 = dv/dt (accel),  u2 = dtheta/dt (turn rate)
+# The ARCH-COMP prose lists "the angle theta ... and velocity nu" in the
+# opposite order. dynamics.m is authoritative: only this ordering reproduces
+# the published closed-loop behaviour (see tests/NAV/).
+
+state_order: [x, y, v, theta]
+
+# Initial set. Position is an interval; speed and heading are points.
+initial_set:
+  x: [2.9, 3.1]
+  y: [2.9, 3.1]
+  v: [0.0, 0.0]
+  theta: [0.0, 0.0]
+
+# Control period (s) and time horizon (s). 6 / 0.2 = 30 control steps.
+control_period: 0.2
+horizon: 6.0
+
+# Control authority. The network's output layer is tanh, so |u| < 1 holds
+# structurally; 1.0 is therefore a sound bound, not a declared constraint.
+control_bound: 1.0
+
+# Obstacle: avoid for all t in [0, horizon]. theta and v unconstrained.
+obstacle:
+  x: [1.0, 2.0]
+  y: [1.0, 2.0]
+
+# Goal: must hold at t = horizon exactly. theta and v unconstrained.
+goal:
+  x: [-0.5, 0.5]
+  y: [-0.5, 0.5]
+
+# Defaults for the (unsound, reference-only) sampled envelope.
+sampling:
+  samples_per_axis: 9
+  substeps_per_control_period: 20
