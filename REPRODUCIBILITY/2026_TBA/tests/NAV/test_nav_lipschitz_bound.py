@@ -20,7 +20,7 @@ from example_imports import activate_example
 EXAMPLE_ROOT = activate_example("NAV")
 
 from core.nav_boundary_finder import NavBoundaryFinder, load_config  # noqa: E402
-from core.nav_lipschitz_bound import (  # noqa: E402
+from core.compositional.nav_lipschitz_bound import (  # noqa: E402
     OUTPUT_COMPONENT_RANGE,
     STATE_DIMENSION,
     NavLipschitzBound,
