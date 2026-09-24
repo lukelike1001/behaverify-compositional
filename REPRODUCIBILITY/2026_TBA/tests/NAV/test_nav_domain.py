@@ -271,3 +271,33 @@ def test_step_clamps_to_the_box(cfg: dict) -> None:
     successor, _overflowed = dynamics.step(
         (0, 0, speed.upper_index, 0), (CONTROL_SCALE, 0))
     assert grid.contains(successor)
+
+
+# ------------------------------- the analytic guard is not sufficient
+
+
+def test_analytic_guard_passes_a_frozen_configuration(cfg: dict) -> None:
+    """
+    h_v = 0.2 passes `quantization()` yet the robot never moves.
+
+    The analytic check uses the declared control bound (1.0), which is tanh's
+    limit and not attainable: the network's largest output is ~990 milli-units
+    against a divisor of exactly 1000, so every step truncates to zero. This
+    test pins the gap so the empirical check in the pipeline cannot be dropped
+    as redundant.
+    """
+    grid, dynamics, _ = build_domain(
+        {"x": 0.345, "y": 0.345, "v": 0.2, "theta": 0.2}, cfg=cfg)
+    assert dynamics.quantization().is_representable      # analytic: fine
+    assert dynamics.velocity_divisor == 1000
+    frozen_control = lambda _indices: (-990, 995)        # the real network's scale
+    start = grid.to_indices([3.0, 3.0, 0.0, 0.0])
+    assert not dynamics.trajectory_moves(start, frozen_control, steps=30)
+
+
+def test_slightly_finer_cells_do_move(cfg: dict) -> None:
+    grid, dynamics, _ = build_domain(
+        {"x": 0.345, "y": 0.345, "v": 0.198, "theta": 0.198}, cfg=cfg)
+    assert dynamics.velocity_divisor < 1000
+    start = grid.to_indices([3.0, 3.0, 0.0, 0.0])
+    assert dynamics.trajectory_moves(start, lambda _i: (-990, 995), steps=30)

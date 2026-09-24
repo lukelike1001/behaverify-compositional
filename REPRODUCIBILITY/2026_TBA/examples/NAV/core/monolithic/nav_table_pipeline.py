@@ -192,6 +192,41 @@ class NavTablePipeline:
             )
         return destination
 
+    def check_the_robot_moves(self) -> None:
+        """
+        Reject a resolution whose discrete trajectory never leaves its cell.
+
+        The generator's analytic guard uses the declared control bound (1.0,
+        the tanh limit). The network never reaches it, so a configuration can
+        pass that check and still be frozen -- h_v = 0.2 is exactly such a
+        case. This is the empirical check, and it needs the network the
+        generator does not have.
+        """
+        import onnxruntime as ort
+
+        session = ort.InferenceSession(str(self.network_path))
+        input_name = session.get_inputs()[0].name
+
+        def control(indices: Sequence[int]) -> tuple[int, int]:
+            physical = np.asarray(self.grid.to_values(indices), dtype=np.float32)
+            output = session.run(None, {input_name: physical.reshape(1, 4)})[0][0]
+            return (int(CONTROL_SCALE * output[0]), int(CONTROL_SCALE * output[1]))
+
+        initial = self.grid.to_indices([
+            (float(self.cfg["initial_set"][name][0])
+             + float(self.cfg["initial_set"][name][1])) / 2.0
+            for name in ("x", "y", "v", "theta")
+        ])
+        steps = int(round(
+            float(self.cfg["horizon"]) / float(self.cfg["control_period"])))
+        if not self.dynamics.trajectory_moves(initial, control, steps):
+            raise ValueError(
+                f"cell sizes {self.cell_sizes} pass the analytic quantization "
+                f"guard but the discrete trajectory never leaves its starting "
+                f"cell -- the network's largest output is below one cell per "
+                f"step. Any verdict here would describe a stationary robot."
+            )
+
     def generate_tree(self, wrapped_network: Path) -> Path:
         """Emit the NSBT. The ONNX path must be relative to the tree file."""
         spec = build_spec(self.grid, self.cfg, f"./{wrapped_network.name}")
@@ -258,6 +293,7 @@ class NavTablePipeline:
 
     def run(self, timeout_seconds: int = 3600) -> NavRunReport:
         self.output_directory.mkdir(parents=True, exist_ok=True)
+        self.check_the_robot_moves()
         wrapped = self.prepare_network()
         tree_path = self.generate_tree(wrapped)
         smv_path, generation_seconds = self.translate(tree_path)

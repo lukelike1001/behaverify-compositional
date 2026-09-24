@@ -348,6 +348,26 @@ class NavDiscreteDynamics:
                      / self.grid.axis("theta").cell_size,
         })
 
+    def trajectory_moves(
+        self,
+        initial_indices: Sequence[int],
+        control: Any,
+        steps: int,
+    ) -> bool:
+        """
+        True when the lattice dynamics actually leave the starting cell.
+
+        `quantization()` is a *necessary* condition only: it uses the declared
+        control bound, which for a tanh output layer is a limit the network
+        never attains. At h_v = 0.2 the divisor is exactly 1000 while the
+        network's largest output is ~990 milli-units, so every step truncates
+        to zero and the robot is frozen even though the analytic check passes.
+
+        This is the sufficient condition, and it needs the real network.
+        """
+        trajectory, _overflowed = self.simulate(initial_indices, control, steps)
+        return len(set(trajectory)) > 1
+
     def simulate(
         self,
         initial_indices: Sequence[int],
