@@ -1,0 +1,48 @@
+configuration {
+    neural
+}
+enumerations {}
+constants {lo := 0, hi := 4}
+variables {
+    variable { env a VAR [lo, hi] assign{result{0}}}
+    variable { env b VAR [lo, hi] assign{result{0}}}
+    variable { bl net NEURAL regression INT
+        inputs { a, b }
+        num_outputs { 1 }
+        config { float 32 }
+        source { './net_gemm_relu.onnx' }
+    }
+    variable { bl seen VAR BOOLEAN assign{result{False}}}
+}
+environment_update {}
+checks {}
+environment_checks {}
+actions {
+    action { Look
+        arguments {} local_variables {} read_variables {net} write_variables {seen}
+        initial_values {}
+        update {
+            variable_statement { seen assign{result{True}} }
+            return_statement {result{success}}
+        }
+    }
+    action { Idle
+        arguments {} local_variables {} read_variables {} write_variables {seen}
+        initial_values {}
+        update {
+            variable_statement { seen assign{result{seen}} }
+            return_statement {result{success}}
+        }
+    }
+}
+sub_trees {}
+tree {
+    composite { Root sequence children {
+        Look {}
+        Idle {}
+    }}
+}
+tick_prerequisite { True }
+specifications {
+    INVARSPEC { (or, seen, (not, seen)) }
+}

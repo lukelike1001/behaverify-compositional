@@ -1,0 +1,12 @@
+=== REGRESSION networks (from run_audit.sh) ===
+
+=== CLASSIFICATION network (Gemm/Relu, no zero weights) ===
+  table          OK (74 smv lines)
+  float          OK (74 smv lines)
+  fixed          OK (74 smv lines)
+  fixed_direct   OK (74 smv lines)
+  real           OK (74 smv lines)
+
+=== fixed/fixed_direct zero-weight bug ===
+  network WITH a zero bias : ValueError: math domain error (dsl_to_nuxmv.py:979, math.log2(0.0))
+  network with NO zeros    : gets past it, then hits the real regression limitation
