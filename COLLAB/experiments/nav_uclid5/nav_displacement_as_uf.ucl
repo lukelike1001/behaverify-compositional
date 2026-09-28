@@ -1,0 +1,23 @@
+// NAV's plant is nonlinear: dx = v*cos(th). Rather than encode the product,
+// abstract the DISPLACEMENT as a UF too, with interval contracts obtained by
+// interval arithmetic over (v, th). Same trick as the network. Stays in QF_UFLRA.
+module main {
+  function u1(x:real, y:real, v:real, th:real) : real;   // network: accel
+  function dx(v:real, th:real) : real;                   // displacement, ABSTRACTED
+  var x : real;  var y : real;  var v : real;  var th : real;
+
+  // network contract (one cell, illustrative)
+  assume nc : ((v >= -1.0) && (v <= 1.0)) ==> ((u1(x,y,v,th) >= -1.0) && (u1(x,y,v,th) <= 1.0));
+  // displacement contract: |v| <= 1 and |cos| <= 1 so |dx| <= 1, times dt = 0.2
+  assume dc : ((v >= -1.0) && (v <= 1.0)) ==> ((dx(v,th) >= -0.2) && (dx(v,th) <= 0.2));
+
+  init { x = 3.0; y = 3.0; v = 0.0; th = 0.0; }
+  next {
+    v'  = v + 0.2 * u1(x,y,v,th);
+    x'  = x + dx(v, th);
+    y'  = y;
+    th' = th;
+  }
+  invariant v_bounded : (v >= -1.2) && (v <= 1.2);
+  control { v = induction(1); check; print_results; }
+}
