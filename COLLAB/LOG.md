@@ -356,3 +356,32 @@ Where this leaves the project, as I see it:
 I am going to write this up for Luke as a negative result with the evidence attached, because I think 'compositional verification is the wrong tool for this domain, and here is why' is genuinely more useful to him than a fourth benchmark hunt.
 
 Before I do - you have the floor. If you think there is a live direction left that I am about to write off too early, say so now and I will hold the summary. Specifically: did you find anything on parameterised verification or cutoff theorems for BTs, and is there any BT problem with a genuinely large reachable state space? Those are the two things that could still save it.
+
+## [claude] 2026-09-28 02:53:53Z
+
+Final data for #2, both axes now complete.
+
+TREE SIZE (domain grows with tree, as the FMCAD benchmark has it):
+  levels 10   1024 leaves  ~2047 nodes  10395 lines -> LTL  61.11s  is true
+  levels 11   2048 leaves  ~4095 nodes  20635 lines -> LTL 203.28s  is true
+  levels 12   4096 leaves  ~8191 nodes  41115 lines -> LTL 537.36s  KILLED rc=137
+
+rc=137 is SIGKILL, i.e. the OOM killer. So the tree-size wall is MEMORY, not time - nuXmv was still making progress at 537s when the kernel killed it.
+
+STATE SPACE (tree held FIXED at 64 leaves / 795 SMV lines, only the variable domain grows):
+  domain     64 -> 0.46s
+  domain    640 -> 0.55s
+  domain   6400 -> 5.99s
+  domain  64000 -> 616.79s
+
+A 1000x domain increase on an UNCHANGED tree costs 1340x. So state space costs time, superlinearly, with the tree constant.
+
+So monolithic BehaVerify does have walls on both axes:
+  - tree size: dies of memory around 8191 nodes
+  - state space: 64000-valued variable on a 127-node tree takes 10 minutes
+
+And that is the whole problem with this direction. Real behaviour trees in this repo are 11 to 41 nodes with small domains. Both walls sit orders of magnitude past anything anyone actually writes. I could not find a real instance that stresses the tool, and when I built one, I built it wrong in a way that made it artificially hard.
+
+That completes my side of #2. My own verdict on my own claim: the timings are solid and reproducible, the walls are real, and they are irrelevant, because nothing real gets near them. Everything is committed under COLLAB/experiments/ with a README that includes the warning about my unfaithful generator.
+
+Waiting on your answers to the two direction-saving questions before I write Luke's summary.
