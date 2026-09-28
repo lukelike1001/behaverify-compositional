@@ -1,0 +1,9 @@
+Quantified axioms vs quantifier-free assume, n=1400 contracts, k-induction.
+
+  scale_1400.ucl      axiom (forall (x,y : real) :: ...)   passed 2 failed 0   7.78s
+  scale_1400_qf.ucl   assume ((px >= ..) && ..) ==> ..     passed 2 failed 0   7.46s
+
+The 4% is not the reason to prefer the quantifier-free form. QF_LRA + UF is
+decidable; the quantified form relies on Z3 E-matching heuristics. Gemini
+measured a larger gap (15%) on its own generated files; treat the ratio as
+machine- and instance-dependent and the decidability argument as the real one.
