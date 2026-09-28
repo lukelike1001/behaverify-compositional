@@ -1,0 +1,24 @@
+// Does interval-bounded control accumulate fatally over a horizon?
+// Gemini #43 says yes: "accumulated control uncertainty over a 30-step horizon
+// causes the reach tube to expand and intersect the obstacle".
+// That is a REACHABILITY/BMC argument. k-induction never unrolls a trajectory -
+// it proves P(s_1..s_k) => P(s_k+1). If a TRAPPING REGION exists, horizon is
+// irrelevant. This model has one: the contracts push inward near the boundary.
+module main {
+  function ctrl(p : real) : real;
+  var pos : real;
+
+  // CROWN-style contracts: control is interval-bounded everywhere,
+  // and near the boundary the network is certified to push INWARD.
+  assume c_mid   : ((pos >= -5.0) && (pos <= 5.0))  ==> ((ctrl(pos) >= -1.0) && (ctrl(pos) <= 1.0));
+  assume c_right : (pos > 5.0)                      ==> ((ctrl(pos) >= -1.0) && (ctrl(pos) <= 0.0));
+  assume c_left  : (pos < -5.0)                     ==> ((ctrl(pos) >= 0.0)  && (ctrl(pos) <= 1.0));
+
+  init { pos = 0.0; }
+  next { pos' = pos + ctrl(pos); }
+
+  // trapping region: |pos| <= 6 is INDUCTIVE under those contracts
+  invariant stays_bounded : (pos >= -6.0) && (pos <= 6.0);
+
+  control { v = induction(1); check; print_results; }
+}

@@ -25,7 +25,8 @@ model=$1
 tmp=$(mktemp --suffix=.ucl)
 sed -E 's|^[[:space:]]*invariant [A-Za-z_0-9]+ :.*|  invariant vacuity_guard : false;|' "$model" > "$tmp"
 out=$("$U" "$tmp" 2>&1)
-base=$(grep -oE "(PASSED|FAILED) -> induction_base" <<<"$out" | grep -oE "PASSED|FAILED" | head -1)
+# NB: `v = induction(k)` labels output "v: induction_base"; bare `induction;` omits the prefix.
+base=$(grep -oE "(PASSED|FAILED) -> ([a-zA-Z_0-9]+: )?induction_base" <<<"$out" | grep -oE "PASSED|FAILED" | head -1)
 rm -f "$tmp"
 
 if [ "$base" = "PASSED" ]; then
