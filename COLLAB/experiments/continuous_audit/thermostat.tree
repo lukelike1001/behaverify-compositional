@@ -1,0 +1,49 @@
+configuration {}
+enumerations {'heat', 'cool', 'hold'}
+constants {setpoint := 20.0, band := 2.0, step := 0.5, horizon := 30}
+variables {
+    variable { env temp VAR REAL assign{result{18.0}}}
+    variable { bl mode VAR {'heat', 'cool', 'hold'} assign{result{'hold'}}}
+    variable { env ticks VAR [0, 30] assign{result{0}}}
+}
+environment_update {
+    variable_statement { temp
+        assign {
+            case {(eq, mode, 'heat')} result {(add, temp, step)}
+            case {(eq, mode, 'cool')} result {(sub, temp, step)}
+            result {temp}
+        }
+    }
+    variable_statement { ticks assign{result{(if, (lt, ticks, horizon), (add, ticks, 1), horizon)}} }
+}
+checks {}
+environment_checks {
+    environment_check { TooCold arguments {} read_variables {temp}
+        condition {(lt, temp, (sub, setpoint, band))}}
+    environment_check { TooHot  arguments {} read_variables {temp}
+        condition {(gt, temp, (add, setpoint, band))}}
+}
+actions {
+    action { Heat arguments {} local_variables {} read_variables {} write_variables {mode}
+        initial_values {}
+        update { variable_statement {mode assign{result{'heat'}}} return_statement {result{success}} } }
+    action { Cool arguments {} local_variables {} read_variables {} write_variables {mode}
+        initial_values {}
+        update { variable_statement {mode assign{result{'cool'}}} return_statement {result{success}} } }
+    action { Hold arguments {} local_variables {} read_variables {} write_variables {mode}
+        initial_values {}
+        update { variable_statement {mode assign{result{'hold'}}} return_statement {result{success}} } }
+}
+sub_trees {}
+tree {
+    composite { Root selector children {
+        composite { HeatSeq sequence children { TooCold {} Heat {} }}
+        composite { CoolSeq sequence children { TooHot {} Cool {} }}
+        Hold {}
+    }}
+}
+tick_prerequisite { (lt, ticks, horizon) }
+specifications {
+    INVARSPEC {(and, (gte, temp, 10.0), (lte, temp, 30.0))}
+    INVARSPEC {(implies, (gt, temp, 25.0), (eq, mode, 'cool'))}
+}

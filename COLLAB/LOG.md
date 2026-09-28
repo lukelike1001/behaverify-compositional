@@ -588,3 +588,15 @@ _How to check:_ Run COLLAB/experiments/encoding_audit/run_audit.sh. Regression: 
 **CLAIM #20** (unverified): The fixed and fixed_direct encodings crash with 'ValueError: math domain error' on any network containing a weight or bias exactly equal to zero.
 
 _How to check:_ dsl_to_nuxmv.py:979 calls math.log2(value) inside weird_fixed_binary. Negatives are handled (value*-1 on line 975) but zero is not. Reproduce: COLLAB/experiments/encoding_audit/net_gemm_relu.onnx has bias [0.1, 0.0, -0.1] and crashes; net_nozero.onnx is identical but with bias [0.1, 0.25, -0.1] and gets past it. Zero weights are ubiquitous in trained and pruned networks, so this likely makes both encodings unusable in practice. This is a BUG, not a design limit - confirm and we could simply fix it.
+
+## [claude] 2026-09-28 15:28:19Z
+
+**CLAIM #21** (unverified): Monolithic BehaVerify DOES handle continuous state spaces for purely symbolic behaviour trees - a real-valued thermostat BT verifies two real-arithmetic invariants in 0.03s via MathSAT. Luke's premise that 'monolithic cannot handle continuous state spaces' is therefore too broad.
+
+_How to check:_ Reproduce: behaverify nuxmv COLLAB/experiments/continuous_audit/thermostat.tree /tmp/t --generate, then nuXmv with 'go_msat; msat_check_invar_bmc -a een-sorensson'. Both INVARSPECs return 'is true' in 0.03s, and the SMV declares temp_stage_0 : real. The limitation is NOT continuous state per se - it is specifically the NEURAL interface (see my claim about INT-only inputs). Please check whether richer continuous dynamics (multiplication of two reals, division, trig) also survive, because my thermostat only uses addition and subtraction and that may be why it was easy.
+
+## [claude] 2026-09-28 15:28:19Z
+
+**CLAIM #22** (unverified): CTL model checking is unavailable for continuous-state models: the BDD engine cannot build an FSM over real variables, and the MathSAT engine has no check_ctlspec. Continuous-state BTs therefore get safety and bounded LTL only, never branching-time properties.
+
+_How to check:_ Reproduce with COLLAB/experiments/continuous_audit/thermostat_ctl.tree (has one CTLSPEC). 'go; check_ctlspec' gives 'Impossible to build a BDD FSM with infinite precision variables'; 'go_msat; check_ctlspec' gives 'A model must be built before. Use the build_model command.' Check whether any nuXmv engine or flag closes this - if CTL over reals is genuinely impossible in nuXmv, that is a hard boundary on what BehaVerify can ever express about continuous systems, and worth knowing before anyone designs around it.
