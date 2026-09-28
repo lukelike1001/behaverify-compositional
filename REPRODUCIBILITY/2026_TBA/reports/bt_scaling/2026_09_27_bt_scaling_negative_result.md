@@ -127,7 +127,38 @@ documented, because the artefact is the finding.
 
 There is no regime where an assume-guarantee decomposition is the right tool.
 
-## 6. Method note
+## 6. One result worth keeping from the abandoned contract work
+
+The ACAS Xu contract pipeline built the week before this report is being deleted
+along with the direction, but it produced one finding that applies to *any*
+contract-based verification and would otherwise be lost.
+
+**Contracts can make a property pass by over-constraining the model, and the
+obvious checks do not catch it.** An ambiguous region keyed by individual
+advisory rather than by advisory *set* emits two contradictory implications over
+the same states. Both fire, the conjunction is unsatisfiable, the transition
+relation stops being total, and everything downstream of the deadlock becomes
+unreachable — so the safety property passes because nothing reachable can
+violate it.
+
+Three checks, and only the third detects it:
+
+| check | catches |
+|---|---|
+| non-vacuity (delete contracts, property must fail) | **under**-constraint |
+| coverage (every reachable state matches some contract) | gaps |
+| **progress** (is the horizon still reachable?) | **over**-constraint |
+
+Safety and coverage both pass happily on a deadlocked model. The minimal
+demonstration: adding one extra `TRANS (x = 2) -> a = q;` beside an existing
+`-> a = p` flipped `INVARSPEC x <= 2` from `is false` to `is true`.
+
+nuXmv's `check_fsm` reports this directly ("transition relation is not total"),
+but it cannot build a BDD FSM over real-valued variables, so for LRA models the
+substitute is a reachability query — `INVARSPEC step != H` returning `is false`,
+where the counterexample *is* the proof that the model runs to completion.
+
+## 7. Method note
 
 All claims were registered in an append-only ledger (`COLLAB/claims.jsonl`)
 before being relied upon, and `collab.py` refuses self-verification. Final state:
@@ -141,7 +172,7 @@ theorems exist for BTs) is deliberately left **unverified**: it is a universal
 negative over literature neither agent can exhaustively read, and agreeing with
 the reasoning is not verification. It should not be cited without a real survey.
 
-## 7. Reproducibility
+## 8. Reproducibility
 
 Everything is committed under `COLLAB/experiments/`:
 

@@ -48,3 +48,8 @@ REPRODUCIBILITY/**/sparse_random/**
 REPRODUCIBILITY/**/nuXmv_DL/**
 src/behaverify.egg-info/
 build/
+# Third-party reference papers and figures kept locally for reading.
+# Not redistributed: cite them instead (licensing is the author's to grant).
+REPRODUCIBILITY/**/reports/**/*.pdf
+REPRODUCIBILITY/**/reports/**/ARCH*.png
+REPRODUCIBILITY/2025_NEUS/serbinowska25a.pdf
