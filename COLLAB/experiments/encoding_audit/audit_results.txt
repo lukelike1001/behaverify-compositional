@@ -1,12 +1,44 @@
-=== REGRESSION networks (from run_audit.sh) ===
+=== REGRESSION networks: (ops x encoding x input domain) ===
+network          encoding       inputs result
+net_gemm_relu    table          int    OK (74 smv lines)
+net_gemm_relu    table          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
+net_gemm_relu    float          int    BTreeException([], 'Cannot have a regression network in nuXmv without using table')
+net_gemm_relu    float          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
+net_gemm_relu    fixed          int    ValueError: math domain error
+net_gemm_relu    fixed          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
+net_gemm_relu    fixed_direct   int    ValueError: math domain error
+net_gemm_relu    fixed_direct   real   BTreeException(trace, 'Neural Network inputs must be of type INT')
+net_gemm_relu    real           int    BTreeException([], 'Cannot have a regression network in nuXmv without using table')
+net_gemm_relu    real           real   BTreeException(trace, 'Neural Network inputs must be of type INT')
+net_tanh         table          int    OK (74 smv lines)
+net_tanh         table          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
+net_tanh         float          int    BTreeException([], 'Network is not being converted to table but has operation other than Rel
+net_tanh         float          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
+net_tanh         fixed          int    ValueError: math domain error
+net_tanh         fixed          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
+net_tanh         fixed_direct   int    ValueError: math domain error
+net_tanh         fixed_direct   real   BTreeException(trace, 'Neural Network inputs must be of type INT')
+net_tanh         real           int    BTreeException([], 'Network is not being converted to table but has operation other than Rel
+net_tanh         real           real   BTreeException(trace, 'Neural Network inputs must be of type INT')
+net_sigmoid      table          int    OK (74 smv lines)
+net_sigmoid      table          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
+net_sigmoid      float          int    BTreeException([], 'Network is not being converted to table but has operation other than Rel
+net_sigmoid      float          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
+net_sigmoid      fixed          int    ValueError: math domain error
+net_sigmoid      fixed          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
+net_sigmoid      fixed_direct   int    ValueError: math domain error
+net_sigmoid      fixed_direct   real   BTreeException(trace, 'Neural Network inputs must be of type INT')
+net_sigmoid      real           int    BTreeException([], 'Network is not being converted to table but has operation other than Rel
+net_sigmoid      real           real   BTreeException(trace, 'Neural Network inputs must be of type INT')
 
-=== CLASSIFICATION network (Gemm/Relu, no zero weights) ===
+=== CLASSIFICATION network (same shape, Gemm/Relu, no zero weights) ===
   table          OK (74 smv lines)
   float          OK (74 smv lines)
   fixed          OK (74 smv lines)
   fixed_direct   OK (74 smv lines)
   real           OK (74 smv lines)
 
-=== fixed/fixed_direct zero-weight bug ===
-  network WITH a zero bias : ValueError: math domain error (dsl_to_nuxmv.py:979, math.log2(0.0))
-  network with NO zeros    : gets past it, then hits the real regression limitation
+=== the fixed/fixed_direct zero-weight bug, isolated ===
+  net_gemm_relu.onnx  bias [0.1, 0.0, -0.1]  -> ValueError: math domain error
+  net_nozero.onnx     bias [0.1, 0.25,-0.1]  -> gets past it, hits the regression limit
+  cause: dsl_to_nuxmv.py:979 math.log2(value); negatives handled at :975, zero is not
