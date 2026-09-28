@@ -1,0 +1,29 @@
+module main {
+  type act_t = enum { up, down, stay };
+  function ctrl(x : real, y : real) : act_t;
+  var px : real;
+  var py : real;
+  var mode : act_t;
+
+  axiom c0 : (forall (x : real, y : real) :: ((x >= 10.0) && (x <= 13.0)) ==> (ctrl(x, y) != up));
+  axiom c1 : (forall (x : real, y : real) :: ((x >= 13.0) && (x <= 16.0)) ==> (ctrl(x, y) != up));
+  axiom c2 : (forall (x : real, y : real) :: ((x >= 16.0) && (x <= 19.0)) ==> (ctrl(x, y) != up));
+  axiom c3 : (forall (x : real, y : real) :: ((x >= 19.0) && (x <= 22.0)) ==> (ctrl(x, y) != up));
+  axiom c4 : (forall (x : real, y : real) :: ((x >= 22.0) && (x <= 25.0)) ==> (ctrl(x, y) != up));
+  axiom c5 : (forall (x : real, y : real) :: ((x >= 25.0) && (x <= 28.0)) ==> (ctrl(x, y) != up));
+  axiom c6 : (forall (x : real, y : real) :: ((x >= 28.0) && (x <= 31.0)) ==> (ctrl(x, y) != up));
+  axiom c7 : (forall (x : real, y : real) :: ((x >= 31.0) && (x <= 34.0)) ==> (ctrl(x, y) != up));
+  axiom c8 : (forall (x : real, y : real) :: ((x >= 34.0) && (x <= 37.0)) ==> (ctrl(x, y) != up));
+  axiom c9 : (forall (x : real, y : real) :: ((x >= 37.0) && (x <= 40.0)) ==> (ctrl(x, y) != up));
+
+  init { px = 0.0; py = 0.0; mode = stay; }
+  next {
+    mode' = ctrl(px, py);
+    px' = if (mode' == up) then px + 1.0 else if (mode' == down) then px - 1.0 else px;
+    py' = py;
+  }
+
+  invariant safe : ((px >= 10.0) && (px <= 40.0)) ==> (ctrl(px, py) != up);
+
+  control { induction; check; print_results; }
+}

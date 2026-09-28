@@ -1,0 +1,16 @@
+module main {
+  type advisory_t = enum { heat, cool, hold };
+  function ctrl(t : integer) : advisory_t;          // the network, abstracted
+  var temp : integer;
+  var mode : advisory_t;
+  // CROWN contracts as axioms - the solver never sees a ReLU
+  axiom c_cold : (forall (t : integer) :: (t <= 18) ==> (ctrl(t) != cool));
+  axiom c_hot  : (forall (t : integer) :: (t >= 22) ==> (ctrl(t) != heat));
+  init { temp = 20; mode = hold; }
+  next {
+    mode' = ctrl(temp);
+    temp' = if (mode' == heat) then temp + 1 else if (mode' == cool) then temp - 1 else temp;
+  }
+  invariant never_heat_when_hot : (temp >= 22) ==> (ctrl(temp) != heat);
+  control { induction; check; print_results; }
+}
