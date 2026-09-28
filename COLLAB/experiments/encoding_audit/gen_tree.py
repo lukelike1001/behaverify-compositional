@@ -31,7 +31,7 @@ actions {{
         arguments {{}} local_variables {{}} read_variables {{net}} write_variables {{seen}}
         initial_values {{}}
         update {{
-            variable_statement {{ seen assign{{result{{True}}}} }}
+            variable_statement {{ seen assign{{case{{(gt, (index, net, 0), 0)}}result{{True}}result{{False}}}} }}
             return_statement {{result{{success}}}}
         }}
     }}

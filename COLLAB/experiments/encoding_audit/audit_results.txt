@@ -1,44 +1,40 @@
-=== REGRESSION networks: (ops x encoding x input domain) ===
-network          encoding       inputs result
-net_gemm_relu    table          int    OK (74 smv lines)
-net_gemm_relu    table          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
-net_gemm_relu    float          int    BTreeException([], 'Cannot have a regression network in nuXmv without using table')
-net_gemm_relu    float          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
-net_gemm_relu    fixed          int    ValueError: math domain error
-net_gemm_relu    fixed          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
-net_gemm_relu    fixed_direct   int    ValueError: math domain error
-net_gemm_relu    fixed_direct   real   BTreeException(trace, 'Neural Network inputs must be of type INT')
-net_gemm_relu    real           int    BTreeException([], 'Cannot have a regression network in nuXmv without using table')
-net_gemm_relu    real           real   BTreeException(trace, 'Neural Network inputs must be of type INT')
-net_tanh         table          int    OK (74 smv lines)
-net_tanh         table          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
-net_tanh         float          int    BTreeException([], 'Network is not being converted to table but has operation other than Rel
-net_tanh         float          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
-net_tanh         fixed          int    ValueError: math domain error
-net_tanh         fixed          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
-net_tanh         fixed_direct   int    ValueError: math domain error
-net_tanh         fixed_direct   real   BTreeException(trace, 'Neural Network inputs must be of type INT')
-net_tanh         real           int    BTreeException([], 'Network is not being converted to table but has operation other than Rel
-net_tanh         real           real   BTreeException(trace, 'Neural Network inputs must be of type INT')
-net_sigmoid      table          int    OK (74 smv lines)
-net_sigmoid      table          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
-net_sigmoid      float          int    BTreeException([], 'Network is not being converted to table but has operation other than Rel
-net_sigmoid      float          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
-net_sigmoid      fixed          int    ValueError: math domain error
-net_sigmoid      fixed          real   BTreeException(trace, 'Neural Network inputs must be of type INT')
-net_sigmoid      fixed_direct   int    ValueError: math domain error
-net_sigmoid      fixed_direct   real   BTreeException(trace, 'Neural Network inputs must be of type INT')
-net_sigmoid      real           int    BTreeException([], 'Network is not being converted to table but has operation other than Rel
-net_sigmoid      real           real   BTreeException(trace, 'Neural Network inputs must be of type INT')
+Encoding support matrix. Network output is USED by the tree in every case
+(see the METHOD WARNING below - an earlier version of this audit did not).
 
-=== CLASSIFICATION network (same shape, Gemm/Relu, no zero weights) ===
-  table          OK (74 smv lines)
-  float          OK (74 smv lines)
-  fixed          OK (74 smv lines)
-  fixed_direct   OK (74 smv lines)
-  real           OK (74 smv lines)
+=== CLASSIFICATION network (Gemm/Relu, no zero weights) ===
+  encoding       result                              network refs in SMV
+  table          OK (104 lines)                       2
+  float          OK (116 lines)                      26
+  fixed          OK (105 lines)                      15
+  fixed_direct   OK ( 99 lines)                       9
+  real           OK ( 91 lines)                      15
+  -> all five encodings genuinely emit network logic for classification.
 
-=== the fixed/fixed_direct zero-weight bug, isolated ===
-  net_gemm_relu.onnx  bias [0.1, 0.0, -0.1]  -> ValueError: math domain error
-  net_nozero.onnx     bias [0.1, 0.25,-0.1]  -> gets past it, hits the regression limit
-  cause: dsl_to_nuxmv.py:979 math.log2(value); negatives handled at :975, zero is not
+=== REGRESSION network (same shape, output indexed) ===
+  table          OK (104 lines)                       2
+  float          BTreeException: Cannot have a regression network in nuXmv without using table
+  fixed          ValueError: math domain error        (zero-weight bug, masks the above)
+  fixed_direct   ValueError: math domain error        (zero-weight bug, masks the above)
+  real           BTreeException: Cannot have a regression network in nuXmv without using table
+  -> regression works ONLY via table, which needs an enumerable input space.
+
+=== REAL-VALUED INPUTS, every encoding, both modes ===
+  BTreeException: 'Neural Network inputs must be of type INT'   (check_grammar.py:643)
+  -> a network can never read continuous state.
+
+=== table encoding accepts arbitrary ONNX ops ===
+  Gemm/Relu OK, Tanh OK, Sigmoid OK. The other four encodings reject
+  anything but Relu and Gemm (dsl_to_nuxmv.py:1278/1517/1669/1805).
+
+=== BUG: fixed / fixed_direct crash on zero-valued weights ===
+  dsl_to_nuxmv.py:979 calls math.log2(value); negatives are handled at :975,
+  zero is not. net_gemm_relu.onnx (bias [0.1, 0.0, -0.1]) crashes;
+  net_nozero.onnx (bias [0.1, 0.25, -0.1]) does not.
+
+=== METHOD WARNING ===
+The first version of this audit was WRONG IN METHOD though right in conclusion.
+The test tree assigned `seen := True` unconditionally, so the network variable
+was pruned before code generation and ALL cases emitted an identical 74-line SMV
+with ZERO network references. It measured whether a tree parses, not whether an
+encoding works. Fixed by making `seen` depend on the network output, and for
+regression by indexing it - `num_outputs` makes the variable an array.

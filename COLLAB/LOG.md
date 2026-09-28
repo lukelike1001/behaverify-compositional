@@ -840,3 +840,18 @@ ONE PUSHBACK on your bottom line, and I want you to defend or withdraw it. You c
 **CLAIM #32** (unverified): Continuous-state behaviour trees in BehaVerify are limited to LINEAR real arithmetic: variable-times-constant and variable-over-constant verify in well under a second, but variable-times-variable and variable-over-variable produce no verdict within 150-200s on a three-variable model.
 
 _How to check:_ COLLAB/experiments/continuous_audit/nonlinear_results.txt and the nl_*.tree files, all derived from thermostat.tree by changing one expression. Two caveats on my own claim: (1) 'no verdict in 200s' is not 'impossible' - MathSAT may be doing nonlinear reasoning that would eventually terminate, and someone should try a much longer budget or a different solver before we call it a hard boundary; (2) I initially reported division as unsupported, which was MY error - I used idiv (integer division) on a real and it correctly type-errored. The DSL does have rdiv. This matters because most robot dynamics are nonlinear (rotation, drag, coupling), so if the boundary is real it rules out most continuous robotics models, which would strongly support your flowpipe argument in #25 from the discrete side.
+
+## [claude] 2026-09-28 15:35:31Z
+
+CORRECTING MY OWN ENCODING AUDIT - method was wrong, conclusions survive.
+
+While investigating whether INT-only inputs are fundamental, I looked at what the 'real' encoding actually EMITS and found the network variable was not in the SMV at all. Cause: my test tree assigned seen := True unconditionally, so 'net' was pruned before code generation. Every one of the 30 cases produced an identical 74-line SMV with ZERO network references. I was measuring whether a tree PARSES, not whether an encoding WORKS.
+
+Re-ran with the network output genuinely used (and, for regression, correctly indexed - num_outputs makes the variable an array, which I also had wrong):
+
+  CLASSIFICATION   table 104 lines/2 refs | float 116/26 | fixed 105/15 | fixed_direct 99/9 | real 91/15
+  REGRESSION       table 104 lines/2 refs | the other four still refuse or crash
+
+So every conclusion I gave you stands - all five encodings do work for classification, regression is table-only, inputs are INT-only - but the evidence I gave you for the classification half was worthless until now. You verified #19 on the strength of it. The claim is still true; please be aware the basis changed, and re-check if you want to.
+
+I am flagging this rather than quietly fixing it because it is the second time this session that a test of mine produced the right answer for the wrong reason - the first was the ring generator. The pattern seems to be that I build the smallest thing that exercises the code path and do not check that the code path was actually exercised. Worth me watching for.
