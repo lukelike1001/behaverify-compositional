@@ -1071,3 +1071,31 @@ I did verify the trivial controller trap empirically and it is real (idle contro
 On #35, the sub-claim I care most about is 'temporal contracts cannot be proved for static NNs without spatial boundaries'. I want to state why I accept it, so it is on the record rather than assumed: for a MEMORYLESS network the output changes exactly when the state crosses a decision boundary, so any dwell-time property reduces to knowing where those boundaries are, which is the spatial partitioning we were trying to escape. The reduction is real. If the network had internal state the argument would not go through, but ours do not.
 
 That was Luke's final frontier, and both halves of it are closed. I am reporting to him that the search is over and the negative result is the deliverable.
+
+## [claude] 2026-09-28 18:33:42Z
+
+**CLAIM #37** (unverified): Symbolic neural verification over reals in nuXmv fails at THREE hidden neurons with generic weights. My earlier 0.03s success was on a hand-built network whose weights made the property unconditionally true and therefore trivially 1-inductive.
+
+_How to check:_ Bisection from the working model, changing ONE thing at a time (COLLAB/experiments/encoding_audit/base_plus_*.tree): base_plus_ticks with my hand-built net = is true 0.66s; base_plus_net with a random 2-3-2 net = TIMEOUT(60s); base_plus_net_r2 with the same net rounded to 2dp = TIMEOUT(60s). Same architecture, same property shape, only weight VALUES differ. My hand-built net has y0-y1 = 0.4*hr0 + 0.9*hr2 + 0.12 with all-positive coefficients, so the property holds unconditionally. CAVEAT ON MY OWN CLAIM: this is n=1 random network and one property. Before treating 'fails at 3 neurons' as general, try several random seeds and several properties - it may be that this particular property is simply hard for this particular net rather than a systematic limit.
+
+## [claude] 2026-09-28 18:33:42Z
+
+FOUR HYPOTHESES REFUTED, then bisection found it, and the answer invalidates my own headline result.
+
+I spent several rounds guessing at causes for the width-3 timeout and was wrong every time: unbounded variable (no), weight precision (no), unrolling depth - even horizon 2 times out (no), non-inductive property (no, the conjunctive version also times out). Zero for four.
+
+Bisecting from the WORKING model instead of guessing at the failing one found it in two steps:
+  working baseline                          is true  0.03s
+  + ticks and tick_prerequisite             is true  0.66s   (24x, but fine)
+  + the random network                      TIMEOUT(60s)
+  + the random network rounded to 2dp       TIMEOUT(60s)
+
+Same 2-3-2 architecture. Only the weight VALUES differ.
+
+Why: my hand-built network was accidentally easy. Working the algebra, y0 - y1 = 0.4*hr0 + 0.9*hr2 + 0.12 - every coefficient positive, so the property is unconditionally true and trivially 1-inductive. I picked those weights myself when I built the toy net, and I did not notice I had made the proof free.
+
+So the result I gave Luke as promising - 'nuXmv verifies a neural property over continuous state in 0.03s with no contracts' - was measured on a network I had inadvertently rigged. With generic weights the same pipeline times out at THREE neurons.
+
+That is much worse than your #31 predicted. Your argument was that general SMT lacks neural relaxations and dies beyond ~50 neurons. The measurement says three, at least for this property. If that generalises, the predicate-abstraction direction is not merely limited, it is dead on arrival, and the sixth contract shape I thought refuted your #35 does not survive either.
+
+I have flagged the obvious caveat on my own claim: n=1 network, n=1 property. Before we tell Luke this is general it needs several seeds and several properties. That is the one experiment I think is still worth running, and it is small - no cluster needed.

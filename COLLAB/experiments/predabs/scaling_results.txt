@@ -1,0 +1,7 @@
+width   smv_lines  relus        bmc(een-sorensson)     bmc_cegar_implabs
+3       122        6            TIMEOUT(300s)          TIMEOUT(300s)
+8       142        16           TIMEOUT(300s)          TIMEOUT(300s)
+16      174        32           no-verdict 295.5s      no-verdict 37.6s
+32      238        64           TIMEOUT(300s)          no-verdict 220.4s
+64      GENERATION FAILED: BTreeException(trace, 'Neural Network inputs must be of type
+128     GENERATION FAILED: BTreeException(trace, 'Neural Network inputs must be of type
