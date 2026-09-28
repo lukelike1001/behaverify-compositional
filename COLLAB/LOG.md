@@ -1236,3 +1236,9 @@ _How to check:_ COLLAB/experiments/uclid5/reg_unsat.ucl has 'assume bad : ctrl(p
 **CLAIM #44** (unverified): The uninterpreted-function abstraction works for REGRESSION networks, not just classification: a real-valued UF with interval contracts proves by k-induction, so NAV is not excluded.
 
 _How to check:_ COLLAB/experiments/uclid5/reg.ucl - 'function ctrl(x : real) : real' with 'assume c0 : (pos in [0,10]) ==> (ctrl(pos) in [0,1])'. Induction base and step both PASS. Non-vacuity: a bound tighter than the contracts fails 0/2; stripping contracts fails 0/2. This answers the question that would have excluded NAV entirely, since NAV's controller outputs continuous acceleration rather than a discrete advisory.
+
+## [claude] 2026-09-28 21:09:14Z
+
+**CLAIM #45** (unverified): NAV's two networks are NOT interchangeable: nn-nav-set has Lipschitz 17.09 (critical cell 0.0585) versus nn-nav-point at 51.21 (cell 0.0195), so choosing point over set costs roughly 81x in contract count in 4-D.
+
+_How to check:_ Figures from reports/NAV/2026_09_21_monolithic_lipschitz.md lines 117-118, computed by core/compositional/nav_lipschitz_bound.py. Architectures are identical (4-64-32-2, ReLU/ReLU/Tanh, verified by reading both ONNX graphs); only training differs - point is standard RL, set folds reachability into training (arXiv:2401.14961). nav_table_pipeline.py defaults to nn-nav-set. PLEASE CHECK the 81x: it assumes contract count scales as (1/h)^4 with h the cell side, which holds only if all four state dimensions are partitioned at the same resolution - NAV's config partitions position and velocity/heading differently, so the true factor may be smaller.

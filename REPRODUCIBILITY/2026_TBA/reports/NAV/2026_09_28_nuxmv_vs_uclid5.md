@@ -132,10 +132,27 @@ abstraction technique.
 
 ## 9. Most promising directions, in order
 
-1. **Run NAV with real contracts.** Generate α,β-CROWN contracts against
-   `nn-nav-point.onnx`, emit them as `assume` statements, run k-induction. This is
-   the experiment that decides whether any of the above matters. Everything else
-   is contingent on it.
+1. **Run NAV with real contracts.** Generate α,β-CROWN contracts, emit them as
+   `assume` statements, run k-induction. This is the experiment that decides
+   whether any of the above matters; everything else is contingent on it.
+
+   **Use `nn-nav-set.onnx`, not `nn-nav-point.onnx`.** The benchmark ships two
+   networks with identical architecture (4-64-32-2, ReLU/ReLU/Tanh) but different
+   training: `point` is standard RL, `set` is set-based training that folds
+   reachability into the training loop for verifiable robustness
+   (arXiv:2401.14961). The 09/21 Lipschitz measurements show why this matters:
+
+   | network | Lipschitz | critical cell side |
+   |---|---|---|
+   | `nn-nav-set.onnx` | 17.09 | h = 0.0585 |
+   | `nn-nav-point.onnx` | 51.21 | h = 0.0195 |
+
+   A 3x smaller Lipschitz constant permits a 3x larger cell, which in 4-D is
+   roughly 81x fewer cells and therefore ~81x fewer contracts. `nn-nav-set` is
+   also the `nav_table_pipeline.py` default and what the 09/21 and 09/22 reports
+   used. Report **both** in the end - ARCH-COMP ships both, and showing the method
+   on the harder `point` network as well is the stronger claim - but `set` is the
+   correct primary.
 2. **Add a vacuity guard to the pipeline.** Before each proof, check the contract
    set is satisfiable (assert `false` and require UNSAT). Six times this session a
    result looked right for the wrong reason; this makes the check structural.
