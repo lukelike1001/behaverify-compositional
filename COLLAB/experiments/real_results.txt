@@ -1,0 +1,8 @@
+tree                                           nodes  gen_s    smv_lines  check_s   result
+MultiAgent/FiveInRing.tree                     41     0.78     378        0.15      10 specs answered
+2025_FMCAD_BT2Fiacre/droneNew.tree             36     0.93     1227       1.28      9 specs answered
+ANSR_revised/ANSR.tree                         31     0.53     282        106.28    0 specs answered
+ANSR_ONNX/ANSR_ONNX.tree                       21     GEN FAILED: 
+ANSR_no_net/ANSR_tree_10cd.tree                20     0.65     277        91.98     2 specs answered
+light_controller/light_controller.tree         17     0.60     273        0.11      9 specs answered
+DONE

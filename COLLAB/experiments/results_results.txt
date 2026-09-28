@@ -1,0 +1,8 @@
+levels  leaves   gen_s      smv_lines  ltl_s      ctl_s        verdict
+4       16       0.60       315        0.06       0.02         is true
+6       64       0.61       795        0.48       0.04         is true
+8       256      1.52       2715       5.25       0.11         is true
+10      1024     12.02      10395      61.11      0.65         is true
+11      2048     45.21      20635      203.28     2.17         is true
+/tmp/claude-1000/-home-lnam-VSCode-behaverify-compositional/734b9139-97e7-470a-9610-20dc857cead8/scratchpad/scaling/measure.sh: line 8: 43557 Killed                  timeout 1800 $NX -source $O.ltl.cmd $SMV > $O.ltl.out 2>&1
+12      4096     185.32     41115      537.36     11.87        no-verdict(rc=137)

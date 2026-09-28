@@ -1,0 +1,7 @@
+model                      leaves   domain    smv_lines  LTL_s     verdict
+decoupled_L6_D64           64       64        795        0.46      is true
+decoupled_L6_D640          64       640       795        0.55      is true
+decoupled_L6_D6400         64       6400      795        5.99      is true
+decoupled_L6_D64000        64       64000     795        616.79    is true
+decoupled_L4_D16           16       16        315        0.06      is true
+decoupled_L4_D1600         16       1600      315        0.45      is true

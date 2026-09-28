@@ -1,0 +1,6 @@
+N     nodes   state_space          gen_s    smv_lines  check_s    result
+3     19      64                   0.94     254        0.05       4 specs answered
+4     25      625                  0.96     314        0.03       5 specs answered
+5     31      7,776                1.05     374        0.05       6 specs answered
+6     37      117,649              1.03     434        0.25       7 specs answered
+7     43      2,097,152            1.20     494        117.93     8 specs answered
