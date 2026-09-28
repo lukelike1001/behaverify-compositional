@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+"""
+collab.py -- shared scratchpad for two agents working the same branch.
+
+Everything here is APPEND-ONLY. Two agents editing one file concurrently is the
+whole problem, so nothing is ever rewritten in place: the discussion is appended
+to LOG.md, and claim status lives in claims.jsonl as a stream of events that
+`status` folds into a current view. Git then merges cleanly instead of
+conflicting, and no agent can silently overwrite the other's work.
+
+The claim ledger is the point. A claim is not established because the agent who
+made it is confident -- it is established when the OTHER agent independently
+checks it. `status` shows what is still unverified, which is the work queue.
+
+Usage:
+    ./collab.py post   <agent> "<message>"
+    ./collab.py claim  <agent> "<statement>" [--evidence "<how to check>"]
+    ./collab.py verify <agent> <id> "<what you did to confirm>"
+    ./collab.py refute <agent> <id> "<what you found instead>"
+    ./collab.py status [--all]
+    ./collab.py log [-n N]
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+LOG = ROOT / "LOG.md"
+CLAIMS = ROOT / "claims.jsonl"
+AGENTS = ("claude", "gemini", "luke")
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+
+
+def _append(path: Path, text: str) -> None:
+    """Single append; atomic enough for two writers on one machine."""
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(text)
+
+
+@dataclass
+class Ledger:
+    """The append-only claim event stream, folded into current state."""
+
+    events: list[dict]
+
+    @classmethod
+    def load(cls) -> "Ledger":
+        """Read the whole event stream."""
+        if not CLAIMS.exists():
+            return cls(events=[])
+        lines = CLAIMS.read_text(encoding="utf-8").splitlines()
+        return cls(events=[json.loads(line) for line in lines if line.strip()])
+
+    def next_id(self) -> int:
+        """One past the highest claim id issued so far."""
+        made = [e["id"] for e in self.events if e["kind"] == "claim"]
+        return max(made, default=0) + 1
+
+    def fold(self) -> dict[int, dict]:
+        """Current state per claim id: statement, author, status, checks."""
+        state: dict[int, dict] = {}
+        for event in self.events:
+            claim_id = event["id"]
+            if event["kind"] == "claim":
+                state[claim_id] = {
+                    "statement": event["statement"],
+                    "author": event["agent"],
+                    "evidence": event.get("evidence", ""),
+                    "status": "unverified",
+                    "checks": [],
+                }
+            elif claim_id in state:
+                state[claim_id]["status"] = (
+                    "verified" if event["kind"] == "verify" else "refuted"
+                )
+                state[claim_id]["checks"].append(
+                    f"{event['kind']} by {event['agent']}: {event['note']}"
+                )
+        return state
+
+    def record(self, event: dict) -> None:
+        """Append one event; never rewrites earlier ones."""
+        _append(CLAIMS, json.dumps(event) + "\n")
+
+
+def post(agent: str, message: str) -> None:
+    """Append a signed, timestamped entry to the discussion log."""
+    _append(LOG, f"\n## [{agent}] {_now()}\n\n{message}\n")
+    print(f"posted to {LOG.name}")
+
+
+def claim(agent: str, statement: str, evidence: str) -> None:
+    """Register a new claim as unverified and announce it in the log."""
+    ledger = Ledger.load()
+    claim_id = ledger.next_id()
+    ledger.record({"kind": "claim", "id": claim_id, "agent": agent, "when": _now(),
+                   "statement": statement, "evidence": evidence})
+    post(agent, f"**CLAIM #{claim_id}** (unverified): {statement}"
+                + (f"\n\n_How to check:_ {evidence}" if evidence else ""))
+    print(f"claim #{claim_id} recorded as unverified")
+
+
+def judge(agent: str, claim_id: int, note: str, kind: str) -> None:
+    """Verify or refute another agent's claim. Self-checking is refused."""
+    ledger = Ledger.load()
+    state = ledger.fold()
+    if claim_id not in state:
+        raise SystemExit(f"no claim #{claim_id}")
+    if state[claim_id]["author"] == agent:
+        raise SystemExit(
+            f"claim #{claim_id} was made by {agent}; the OTHER agent must check it"
+        )
+    ledger.record({"kind": kind, "id": claim_id, "agent": agent,
+                   "when": _now(), "note": note})
+    post(agent, f"**{kind.upper()} #{claim_id}**: {note}\n\n"
+                f"_Claim was:_ {state[claim_id]['statement']}")
+    print(f"claim #{claim_id} marked {kind}d by {agent}")
+
+
+def status(show_all: bool) -> None:
+    """Print current claim states, unverified and refuted first."""
+    state = Ledger.load().fold()
+    if not state:
+        print("no claims yet")
+        return
+    order = {"refuted": 0, "unverified": 1, "verified": 2}
+    for claim_id, entry in sorted(state.items(), key=lambda kv: (order[kv[1]["status"]], kv[0])):
+        if not show_all and entry["status"] == "verified":
+            continue
+        mark = {"unverified": "?", "verified": "+", "refuted": "x"}[entry["status"]]
+        print(f"[{mark}] #{claim_id} ({entry['author']}, {entry['status']}) {entry['statement']}")
+        if entry["evidence"] and entry["status"] == "unverified":
+            print(f"      check: {entry['evidence']}")
+        for check in entry["checks"]:
+            print(f"      {check}")
+    pending = sum(1 for e in state.values() if e["status"] == "unverified")
+    print(f"\n{pending} unverified of {len(state)}")
+
+
+def main() -> None:
+    """Parse arguments and dispatch."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+    poster = sub.add_parser("post")
+    poster.add_argument("agent", choices=AGENTS)
+    poster.add_argument("message")
+    claimer = sub.add_parser("claim")
+    claimer.add_argument("agent", choices=AGENTS)
+    claimer.add_argument("statement")
+    claimer.add_argument("--evidence", default="")
+    for kind in ("verify", "refute"):
+        judger = sub.add_parser(kind)
+        judger.add_argument("agent", choices=AGENTS)
+        judger.add_argument("id", type=int)
+        judger.add_argument("note")
+    reporter = sub.add_parser("status")
+    reporter.add_argument("--all", action="store_true")
+    tailer = sub.add_parser("log")
+    tailer.add_argument("-n", type=int, default=40)
+    args = parser.parse_args()
+
+    if args.command == "post":
+        post(args.agent, args.message)
+    elif args.command == "claim":
+        claim(args.agent, args.statement, args.evidence)
+    elif args.command in ("verify", "refute"):
+        judge(args.agent, args.id, args.note, args.command)
+    elif args.command == "status":
+        status(args.all)
+    elif args.command == "log":
+        print("\n".join(LOG.read_text(encoding="utf-8").splitlines()[-args.n:])
+              if LOG.exists() else "(empty)")
+
+
+if __name__ == "__main__":
+    main()
