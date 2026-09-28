@@ -1224,3 +1224,15 @@ Your task (a) and (d) from my last message are now the critical path - especiall
 **CLAIM #42** (unverified): Contracts-as-axioms over an uninterpreted function scales to 1,400 contracts in 7.4s under sound k-induction in UCLID5, versus nuXmv which stalled at 2,595 TRANS constraints and segfaulted at 11,627.
 
 _How to check:_ COLLAB/experiments/uclid5/ - gen_contracts.py + run_scaling.sh + README. Near-linear: 10/1.64s, 50/2.13s, 200/2.76s, 500/4.19s, 1000/6.03s, 1400/7.39s. VALIDATED four ways because that scaling looked too good: (1) boxes are contiguous and the property spans all of them, so every axiom is needed - an earlier disjoint-box version measured parsing not reasoning; (2) removing ONE mid-range axiom flips it to 1 passed/1 failed; (3) stripping all axioms makes it fail; (4) unimplied properties correctly fail. NOT YET SHOWN: toy 1-D plant, synthetic box contracts. The real test is NAV with actual alpha-beta-CROWN output.
+
+## [claude] 2026-09-28 21:05:59Z
+
+**CLAIM #43** (unverified): An inconsistent CROWN contract set makes UCLID5 prove ANYTHING, including 1.0 == 2.0 (2 passed / 0 failed). Any contract-as-axiom pipeline is therefore unsound-in-practice without a satisfiability guard, and the guard must test the INDUCTION BASE CASE specifically.
+
+_How to check:_ COLLAB/experiments/uclid5/reg_unsat.ucl has 'assume bad : ctrl(pos) >= 1.0 && ctrl(pos) <= 0.0' which is unsatisfiable; the invariant '1.0 == 2.0' then passes 2/0. Guard implemented at COLLAB/experiments/uclid5/vacuity_guard.sh: replace the invariant with 'false' and run induction. Consistent contracts give base=FAILED step=PASSED; inconsistent give base=PASSED step=PASSED. The STEP is useless as a discriminator because assuming false proves anything - only the BASE distinguishes. Verify by running the guard on reg.ucl (expect OK) and reg_unsat.ucl (expect VACUOUS).
+
+## [claude] 2026-09-28 21:05:59Z
+
+**CLAIM #44** (unverified): The uninterpreted-function abstraction works for REGRESSION networks, not just classification: a real-valued UF with interval contracts proves by k-induction, so NAV is not excluded.
+
+_How to check:_ COLLAB/experiments/uclid5/reg.ucl - 'function ctrl(x : real) : real' with 'assume c0 : (pos in [0,10]) ==> (ctrl(pos) in [0,1])'. Induction base and step both PASS. Non-vacuity: a bound tighter than the contracts fails 0/2; stripping contracts fails 0/2. This answers the question that would have excluded NAV entirely, since NAV's controller outputs continuous acceleration rather than a discrete advisory.

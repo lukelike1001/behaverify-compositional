@@ -1,0 +1,22 @@
+// REGRESSION case: the network returns a REAL (an acceleration), and CROWN
+// contracts are INTERVAL bounds on that real output. This is what NAV needs.
+module main {
+  function ctrl(x : real) : real;        // u = ctrl(state), continuous output
+  var pos : real;
+  var vel : real;
+
+  // CROWN: "over this region, the control output lies in this interval"
+  assume c0 : ((pos >= 0.0)  && (pos <= 10.0)) ==> ((ctrl(pos) >= 0.0)  && (ctrl(pos) <= 1.0));
+  assume c1 : ((pos >  10.0) && (pos <= 20.0)) ==> ((ctrl(pos) >= -1.0) && (ctrl(pos) <= 0.0));
+
+  init { pos = 0.0; vel = 0.0; }
+  next {
+    vel' = ctrl(pos);
+    pos' = pos + vel';
+  }
+
+  // safety: velocity is bounded by what the contracts permit
+  invariant vel_bounded : (pos >= 0.0 && pos <= 20.0) ==> (ctrl(pos) >= -1.0 && ctrl(pos) <= 1.0);
+
+  control { induction; check; print_results; }
+}
