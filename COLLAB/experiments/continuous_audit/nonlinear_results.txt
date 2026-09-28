@@ -1,0 +1,15 @@
+Continuous dynamics: which real arithmetic survives?
+Base model: thermostat.tree (3 variables), only the heat branch's expression changes.
+Engine: go_msat + msat_check_invar_bmc -a een-sorensson, 150-200s budget.
+
+  (add,  temp, step)    variable + constant      is true
+  (mult, temp, 1.5)     variable * constant      is true
+  (rdiv, temp, 2.0)     variable / constant      is true
+  (mult, temp, rate)    variable * VARIABLE      NO VERDICT (>200s)
+  (rdiv, temp, rate)    variable / VARIABLE      NO VERDICT (>150s)
+
+Linear real arithmetic works. Nonlinear does not terminate.
+
+CORRECTION: an earlier run reported div as unsupported. That was wrong - it used
+idiv (integer division), which correctly type-errors on a real. The DSL does have
+rdiv for reals. Retested above.
