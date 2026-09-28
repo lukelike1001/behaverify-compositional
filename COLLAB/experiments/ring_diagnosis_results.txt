@@ -1,0 +1,6 @@
+ring N=7  (declared space 2,097,152)
+  reachable:                         reachable states: 23 (2^4.52356) out of 2.68435e+08 (2^28)
+  check_invar:                          0.13s  (1 answered)
+  check_ctlspec:                      101.43s  (7 answered)
+  check_ctlspec WITH -dynamic:         10.92s  (7 answered)
+DONE

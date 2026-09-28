@@ -1,0 +1,4 @@
+== hand-written original ==
+  FiveInRing             8 false / 2 true
+== generated (gen_ring.py) ==
+  ring_5                 0 false / 6 true

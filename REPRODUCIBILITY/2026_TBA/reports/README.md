@@ -11,5 +11,6 @@ reports/
 ├── Acas_Xu_closed_loop/
 ├── grid_world/
 ├── misc/ # for directory-wide refactors that can modify both examples
+├── bt_scaling/ # whether compositional verification has headroom on plain BTs
 ```
 
