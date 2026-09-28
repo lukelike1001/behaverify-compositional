@@ -10,6 +10,7 @@ be re-run.
 | `decouple.sh` | state-space size with the tree held FIXED — the benchmark confounds the two axes | `decoupled_results.txt` |
 | `real.sh` | the largest real trees in `examples/` | `real_results.txt` |
 | `gen_ring.py` + `ring.sh` | generated N-robot ring, a realistic multi-agent scaling axis | `ring_results.txt` |
+| `reachable.sh` | reachable state space + check time on the two models that carry the conclusion | `reachable_results.txt` |
 
 ## Read this before trusting `gen_ring.py`
 
@@ -22,6 +23,26 @@ apparent wall at N=7 is a consequence of that choice, not a property of
 BehaVerify or of multi-agent behaviour trees.
 
 Kept anyway, because the artefact is the finding.
+
+## The two measurements the conclusion rests on
+
+    DrunkenDrone   3,060,480 reachable (diameter 42)    2 specs in  0.15s
+    drone3         7,432,390 reachable (diameter 950)   6 specs in 66.54s
+
+Behaviour trees *do* have large reachable state spaces, and monolithic
+BehaVerify verifies them anyway — DrunkenDrone is a five-node tree with three
+million reachable states checked in under a fifth of a second. That is the
+whole negative result: there is no state-space explosion here for compositional
+verification to cure.
+
+Neither `.tree` file is copied into this folder. Both are already tracked
+(`examples/DrunkenDrone/`, `examples/2025_FMCAD_BT2Fiacre/`) and were not
+modified; duplicating them would only let the copies drift.
+
+**Gotcha:** `drone3` does not build with the current `behaverify` CLI. It needs
+the 2025_FMCAD generator and metamodel, and `reachable.sh` uses the right one.
+Using the CLI gives a generation failure that looks like a broken model — it
+cost me an hour.
 
 ## What the numbers actually showed
 

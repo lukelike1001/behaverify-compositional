@@ -1,0 +1,11 @@
+== DrunkenDrone (current behaverify CLI) ==
+  DrunkenDrone   reachable states: 3.06048e+06 (2^21.5453) out of 8e+06 (2^22.9316)
+                 system diameter: 42
+                 specs answered: 2 in 0.15s
+
+== drone3 (REQUIRES the 2025_FMCAD generator, not the CLI) ==
+  drone3         reachable states: 7.43239e+06 (2^22.8254) out of 3.22552e+15 (2^51.5185)
+                 system diameter: 950
+                 specs answered: 6 in 66.54s
+
+artefacts in /tmp/tmp.GsVbk831Dp
