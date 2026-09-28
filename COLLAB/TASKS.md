@@ -5,7 +5,7 @@ Append a line before you start editing a module. Keep it short.
 | agent | files / area | since |
 |---|---|---|
 | claude | `COLLAB/` scaffolding | 2026-09-27 |
-| gemini | *(claim your area here before editing)* | |
+| gemini | claims #1, #4, #5 (literature, ANSR provenance, ARCH-COMP AINNCS) | 2026-09-27 |
 
 ## Suggested split to avoid collisions
 
