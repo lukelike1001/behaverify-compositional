@@ -1,0 +1,160 @@
+"""
+Incremental demand-driven refinement.
+
+z3_cegar.py rebuilds the whole solver every iteration, so each round pays for
+the transition relation, the plant contracts and the property again, and throws
+away everything Z3 learned.  Refinement only ever ADDS contracts, so the
+assertion set is monotone and Z3 can be driven incrementally instead: build the
+frame once, then assert the new cells' implications and re-check.
+
+Soundness is unchanged - the assertions are the same ones, in the same
+direction - so this is purely a speed change, and it is cross-checked against
+the non-incremental loop.
+
+Usage: python3 .../z3_cegar_inc.py <nx> <nv> <nvd> <K> [max_iters] [ladder]
+"""
+import math
+import sys
+import time
+import warnings
+
+warnings.filterwarnings("ignore")
+import numpy as np
+import torch
+import z3
+
+sys.path.insert(0, "COLLAB/experiments/nav_uclid5")
+sys.path.insert(0, "COLLAB/experiments/nav_sound")
+from gen_nav_contracts import load_net, crown_bounds, floor_to, ceil_to  # noqa: E402
+from gen_nav_affine import NET                                           # noqa: E402
+from gen_nav_smv import displacement_bounds                              # noqa: E402
+from z3_cegar import cell_index, cell_box, seed_cells, with_neighbours   # noqa: E402
+from auto_LiRPA import BoundedModule                                     # noqa: E402
+
+DT = 0.2
+XR, VR = (-1.0, 3.5), (-2.0, 2.0)
+OBS = ((1.0, 2.0), (1.0, 2.0))
+
+
+# pylint: disable-next=too-many-instance-attributes
+class IncrementalRefiner:
+    """Holds one Z3 solver and grows its contract set in place."""
+
+    def __init__(self, nx, nv, nth, nvd, horizon):
+        self.nx, self.nv, self.nth = nx, nv, nth
+        self.nvd, self.horizon = nvd, horizon
+        self.bm = BoundedModule(load_net(NET), torch.zeros(1, 4))
+        self.solver = z3.Solver()
+        self.emitted = set()
+        self.state = [[z3.Real(f"{n}_{k}") for n in ("x", "y", "v", "th")]
+                      for k in range(horizon + 1)]
+        self._frame()
+
+    # pylint: disable-next=too-many-locals
+    def _frame(self):
+        """Initial set, transition relation, plant contracts and property."""
+        st = self.state
+        s = self.solver
+        s.add(st[0][0] >= 2.9, st[0][0] <= 3.1,
+              st[0][1] >= 2.9, st[0][1] <= 3.1,
+              st[0][2] == 0.0, st[0][3] == 0.0)
+        vd = np.linspace(*VR, self.nvd + 1)
+        td = np.linspace(-math.pi, math.pi, self.nvd + 1)
+        for k in range(self.horizon):
+            x, y, v, th = st[k]
+            u1, u2, dx, dy = (z3.Real(f"{n}_{k}")
+                              for n in ("u1", "u2", "dx", "dy"))
+            s.add(u1 >= -1, u1 <= 1, u2 >= -1, u2 <= 1)
+            for a in range(self.nvd):
+                for b in range(self.nvd):
+                    (dxl, dxh), (dyl, dyh) = displacement_bounds(
+                        vd[a], vd[a + 1], td[b], td[b + 1])
+                    g = z3.And(v >= float(vd[a]), v <= float(vd[a + 1]),
+                               th >= float(td[b]), th <= float(td[b + 1]))
+                    s.add(z3.Implies(g, z3.And(dx >= dxl, dx <= dxh,
+                                               dy >= dyl, dy <= dyh)))
+            s.add(st[k + 1][0] == x + dx, st[k + 1][1] == y + dy,
+                  st[k + 1][2] == v + DT * u1, st[k + 1][3] == th + DT * u2)
+        s.add(z3.Or([z3.And(st[k][0] >= OBS[0][0], st[k][0] <= OBS[0][1],
+                            st[k][1] >= OBS[1][0], st[k][1] <= OBS[1][1])
+                     for k in range(self.horizon + 1)]))
+
+    # pylint: disable-next=too-many-locals
+    def add_cells(self, keys):
+        """Assert the network contract for each not-yet-emitted cell."""
+        fresh = [k for k in keys if k not in self.emitted]
+        if not fresh:
+            return 0
+        boxes = [cell_box(k, self.nx, self.nv, self.nth) for k in fresh]
+        lo = np.array([b[0] for b in boxes], np.float32)
+        hi = np.array([b[1] for b in boxes], np.float32)
+        clb, cub = crown_bounds(self.bm, lo, hi)
+        for k in range(self.horizon):
+            x, y, v, th = self.state[k]
+            u1 = z3.Real(f"u1_{k}")
+            for n in range(len(fresh)):
+                guard = z3.And(x >= float(lo[n][0]), x <= float(hi[n][0]),
+                               y >= float(lo[n][1]), y <= float(hi[n][1]),
+                               v >= float(lo[n][2]), v <= float(hi[n][2]),
+                               th >= float(lo[n][3]), th <= float(hi[n][3]))
+                self.solver.add(z3.Implies(guard, z3.And(
+                    u1 >= floor_to(max(float(clb[n][0]), -1.0)),
+                    u1 <= ceil_to(min(float(cub[n][0]), 1.0)))))
+        self.emitted.update(fresh)
+        return len(fresh)
+
+    def counterexample_cells(self, model):
+        """Cells the counterexample trace occupies."""
+        out = set()
+        for k in range(self.horizon + 1):
+            vals = [float(model.eval(self.state[k][i], model_completion=True)
+                          .as_fraction()) for i in range(4)]
+            out.add((cell_index(vals[0], *XR, self.nx),
+                     cell_index(vals[1], *XR, self.nx),
+                     cell_index(vals[2], *VR, self.nv),
+                     cell_index(vals[3], -math.pi, math.pi, self.nth)))
+        return out
+
+
+def main():
+    """Refine incrementally and report the outcome."""
+    nx, nv, nvd = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
+    horizon = int(sys.argv[4])
+    max_iters = int(sys.argv[5]) if len(sys.argv) > 5 else 40
+    nth = nv
+    ref = IncrementalRefiner(nx, nv, nth, nvd, horizon)
+    active = with_neighbours(seed_cells(nx, nv, nth), (nx, nx, nv, nth))
+    print(f"incremental, net {nx}x{nv}x{nth}, disp {nvd} (all), "
+          f"horizon {horizon}")
+    ref.add_cells(active)
+    print(f"  seeded with {len(ref.emitted)} network cells "
+          f"+ {nvd*nvd} plant contracts")
+
+    for it in range(max_iters):
+        t0 = time.time()
+        res = ref.solver.check()
+        dt = time.time() - t0
+        if res == z3.unsat:
+            print(f"  iter {it}: {len(ref.emitted)} cells -> UNSAT ({dt:.1f}s)")
+            print(f"  PROVED to depth {horizon} with {len(ref.emitted)} "
+                  f"network contracts of {nx*nx*nv*nth} "
+                  f"({nx*nx*nv*nth/len(ref.emitted):.0f}x fewer) "
+                  f"plus {nvd*nvd} plant contracts")
+            return
+        if res != z3.sat:
+            print(f"  iter {it}: {res} ({dt:.1f}s)")
+            return
+        cells = ref.counterexample_cells(ref.solver.model())
+        new = with_neighbours(cells - ref.emitted, (nx, nx, nv, nth))
+        added = ref.add_cells(new)
+        print(f"  iter {it}: {len(ref.emitted)} cells -> SAT ({dt:.1f}s), "
+              f"+{added} new")
+        if not added:
+            print("  counterexample stays inside the covered cells: the GRID "
+                  "is too coarse, adding cells cannot help")
+            return
+    print(f"  stopped after {max_iters} iterations at {len(ref.emitted)} cells")
+
+
+if __name__ == "__main__":
+    main()
