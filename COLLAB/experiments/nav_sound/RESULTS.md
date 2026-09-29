@@ -194,3 +194,38 @@ python3 COLLAB/experiments/nav_sound/slack_check.py 8 8     # width along trajec
 python3 COLLAB/experiments/nav_sound/theta_sensitivity.py   # 3b
 python3 COLLAB/experiments/nav_sound/gen_nav_smv.py 8 8 obstacle 32    # 3a
 ```
+
+---
+
+# Attack 4 — is the bound CROWN's fault? **No. CROWN is nearly tight.**
+
+If the intervals were loose because of the *relaxation* rather than the cell
+size, a stronger bounding method (full α,β-CROWN with branch and bound, or exact
+MILP) would buy precision at no extra contract cost. Measured against the true
+range of `u1` over the same cell by dense sampling (12⁴ = 20,736 points):
+
+| cell (nx/nv/nth) | CROWN | sampled true | CROWN w | true w | ratio |
+|---|---|---|---|---|---|
+| 8/8/8 | [−1.403, 0.599] | [−0.934, 0.577] | 2.002 | 1.511 | **1.32×** |
+| 8/16/16 | [−1.131, −0.014] | [−0.934, −0.016] | 1.116 | 0.918 | **1.22×** |
+| 16/32/16 | [−0.911, −0.262] | [−0.834, −0.263] | 0.649 | 0.571 | **1.14×** |
+
+Sampling under-approximates the true range, so these ratios are upper bounds on
+the available slack. **The network's output genuinely varies by ~1.5 across the
+failure cell** — the width is a fact about the function on that box, not an
+artefact of the relaxation. At most ~1.3× is recoverable from better bounding,
+against the 4–85× needed.
+
+# Summary: every escape route is measured and closed
+
+| route | result | where |
+|---|---|---|
+| finer uniform grid | needs 32k–524k contracts vs a 6–8k ceiling | 3d |
+| different budget allocation | no effect — 3 configs at 5,120, all k=8 | 3a |
+| non-uniform (fine near obstacle) | refines x,y, the **weakest** axes | 3b, 3c |
+| tighter bounding method | ≤1.32× available | 4 |
+| different solver (UCLID5) | 12–82× **slower** than nuXmv on this architecture | claim #55 |
+
+Precision can come only from smaller cells; cells cost `nx²·nv·nth`; the
+solver ceiling is 6,000–8,000. The window is empty, and now provably so rather
+than just observedly so.
