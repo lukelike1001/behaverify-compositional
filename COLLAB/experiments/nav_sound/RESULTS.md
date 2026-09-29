@@ -65,3 +65,59 @@ python3 COLLAB/experiments/nav_sound/gen_nav_smv.py 12 6 obstacle # Phase 2/3
 nuXmv -source <(printf 'go_msat\nmsat_check_invar_bmc -a een-sorensson\nquit\n') \
       COLLAB/experiments/nav_sound/nav_12_6_obstacle.smv
 ```
+
+---
+
+# Attacks on the above conclusion, and the sharper limit they produced
+
+## Attack 1 — is the segfault nuXmv's or my encoding's? **nuXmv's.**
+
+16,448 *simple* contracts (1 variable, 2-term antecedent — the shape that ran in
+0.63 s at 1,400) segfault identically. Bisected on that simple shape:
+
+| simple contracts | result |
+|---|---|
+| 6,000 | `is true`, 6.9 s |
+| 8,000 | **SEGFAULT** |
+| 10,000 / 12,000 | **SEGFAULT** |
+
+**nuXmv's `INVAR` ceiling is 6,000–8,000, independent of model complexity.**
+
+## Attack 2 — a real hole in the model, but not the cause
+
+nuXmv could not prove `|v| <= 2.0`, because contracts exist only *inside* the
+operating box; once `v` escapes, `u` is unconstrained. `tanh` bounds `|u| <= 1`
+**everywhere**, a free structural fact that was not encoded. Added it. Safety
+still `is false`. (Also corrected: true max `|v|` is **1.770**, not the 1.19 I
+first reported from the opening steps.)
+
+## The finding that moved the needle: decouple the two grids
+
+Drift grows ~0.4/step, which tracks the **v-cell width (0.667)**, not the CROWN
+bound width — so displacement, not the network, was binding. Displacement depends
+only on (v, θ), so it costs `nvd²` rather than `nx²·nv²`.
+
+| model | contracts | verdict | violated at |
+|---|---|---|---|
+| net 12×6, disp 6×6 (coupled) | 5,184 | `is false` | k = 4 |
+| net 8×4, disp 48×48 | 3,328 | `is false` | k = 9 |
+| net 10×5, disp 32×32 | 3,524 | `is false` | k = 8 |
+| net 6×3, disp 64×64 | 4,420 | `is false` | k = 8 |
+| **net 8×4, disp 64×64** | **5,120** | `is false` | **k = 9** |
+| net 6×3, disp 96×96 | 9,540 | **SEGFAULT** | — |
+
+Decoupling roughly **doubled the proved horizon at lower contract count**.
+Refining displacement past 32 bands gained nothing, so the binding constraint
+moved back to the network contracts — which cost `nx²·nv²` and hit the ceiling
+immediately.
+
+## The limit, stated precisely
+
+**~9 of NAV's 30 steps are proved sound before the over-approximation reaches the
+obstacle, and the refinement that would extend it exceeds nuXmv's 6–8k `INVAR`
+capacity.** Every counterexample is spurious: the true system never enters the
+obstacle from any of 9 starts.
+
+This is not "NAV fails". It is a measured horizon with the binding constraint
+identified at each stage: displacement bloat first, then network bound width,
+then solver capacity.

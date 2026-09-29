@@ -35,7 +35,8 @@ def displacement_bounds(vlo, vhi, tlo, thi, samples=400):
             (floor_to(dy.min() - pad), ceil_to(dy.max() + pad)))
 
 
-def build(nx: int, nv: int, xr=(-1.0, 3.5), vr=(-2.0, 2.0)) -> str:
+def build(nx: int, nv: int, nvd: int | None = None,
+          xr=(-1.0, 3.5), vr=(-2.0, 2.0)) -> str:
     xs = np.linspace(*xr, nx + 1); vs = np.linspace(*vr, nv + 1)
     ts = np.linspace(-math.pi, math.pi, nv + 1)
     bm = BoundedModule(load_net(NET), torch.zeros(1, 4))
@@ -68,11 +69,15 @@ def build(nx: int, nv: int, xr=(-1.0, 3.5), vr=(-2.0, 2.0)) -> str:
                  f" u2 >= {floor_to(max(l[1],-1.0)):.6f} &"
                  f" u2 <= {ceil_to(min(u[1],1.0)):.6f});")
 
-    for a in range(nv):
-        for b in range(nv):
-            (dxl, dxh), (dyl, dyh) = displacement_bounds(vs[a], vs[a+1], ts[b], ts[b+1])
-            L.append(f"INVAR (v >= {vs[a]:.6f} & v <= {vs[a+1]:.6f} &"
-                     f" th >= {ts[b]:.6f} & th <= {ts[b+1]:.6f}) ->"
+    # displacement grid is INDEPENDENT of the network grid and far cheaper:
+    # nvd^2 entries rather than nx^2 * nv^2
+    nvd = nvd or nv
+    vd = np.linspace(*vr, nvd + 1); td = np.linspace(-math.pi, math.pi, nvd + 1)
+    for a in range(nvd):
+        for b in range(nvd):
+            (dxl, dxh), (dyl, dyh) = displacement_bounds(vd[a], vd[a+1], td[b], td[b+1])
+            L.append(f"INVAR (v >= {vd[a]:.6f} & v <= {vd[a+1]:.6f} &"
+                     f" th >= {td[b]:.6f} & th <= {td[b+1]:.6f}) ->"
                      f" (dx >= {dxl:.6f} & dx <= {dxh:.6f} &"
                      f" dy >= {dyl:.6f} & dy <= {dyh:.6f});")
 
@@ -90,8 +95,10 @@ def build(nx: int, nv: int, xr=(-1.0, 3.5), vr=(-2.0, 2.0)) -> str:
 
 if __name__ == "__main__":
     nx, nv = int(sys.argv[1]), int(sys.argv[2])
-    text = build(nx, nv)
-    out = pathlib.Path(f"COLLAB/experiments/nav_sound/nav_{nx}_{nv}_"
+    nvd = int(sys.argv[4]) if len(sys.argv) > 4 else None
+    text = build(nx, nv, nvd)
+    tag = f"{nx}_{nv}" + (f"_d{nvd}" if nvd else "")
+    out = pathlib.Path(f"COLLAB/experiments/nav_sound/nav_{tag}_"
                        f"{sys.argv[3] if len(sys.argv)>3 else 'obstacle'}.smv")
     out.write_text(text)
     print(f"  {out.name}: {len(text.splitlines())} lines, "
