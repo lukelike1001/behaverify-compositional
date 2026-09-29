@@ -36,6 +36,7 @@ sys.path.insert(0, "COLLAB/experiments/nav_sound")
 from gen_nav_contracts import load_net, crown_bounds, floor_to, ceil_to  # noqa: E402
 from gen_nav_affine import crown_affine, NET                             # noqa: E402
 from gen_nav_smv import displacement_bounds                              # noqa: E402
+from affine_displacement import affine_displacement                      # noqa: E402
 from auto_LiRPA import BoundedModule                                     # noqa: E402
 
 DT = 0.2
@@ -106,7 +107,8 @@ def with_neighbours(keys, limits):
 
 
 # pylint: disable-next=too-many-arguments,too-many-positional-arguments,too-many-locals
-def build(active, dactive, kind, bm, nx, nv, nth, nvd, horizon):
+def build(active, dactive, kind, bm, nx, nv, nth, nvd, horizon,
+          affine_disp=False):
     """A BMC query carrying contracts for the active cells only.
 
     Both families are restricted: the network cells in ``active`` and the
@@ -151,12 +153,25 @@ def build(active, dactive, kind, bm, nx, nv, nth, nvd, horizon):
                     u1 >= floor_to(max(float(clb[n][0]), -1.0)),
                     u1 <= ceil_to(min(float(cub[n][0]), 1.0)))))
         for a, b in sorted(dactive):
-            (dxl, dxh), (dyl, dyh) = displacement_bounds(
-                vd[a], vd[a + 1], td[b], td[b + 1])
             g = z3.And(v >= float(vd[a]), v <= float(vd[a + 1]),
                        th >= float(td[b]), th <= float(td[b + 1]))
-            s.add(z3.Implies(g, z3.And(dx >= dxl, dx <= dxh,
-                                       dy >= dyl, dy <= dyh)))
+            if affine_disp:
+                # dx = v*cos(th)*dt linearised about the cell centre with a
+                # sound second-order remainder.  Couples only v and th, so it
+                # stays cheap, and at nvd=32 it is TIGHTER than the
+                # concretized interval at nvd=128 with 16x fewer contracts.
+                cons = []
+                for var, use_sin in ((dx, False), (dy, True)):
+                    av, ath, c, rad = affine_displacement(
+                        vd[a], vd[a + 1], td[b], td[b + 1], DT, use_sin)
+                    cons += [var >= av * v + ath * th + (c - rad),
+                             var <= av * v + ath * th + (c + rad)]
+                s.add(z3.Implies(g, z3.And(*cons)))
+            else:
+                (dxl, dxh), (dyl, dyh) = displacement_bounds(
+                    vd[a], vd[a + 1], td[b], td[b + 1])
+                s.add(z3.Implies(g, z3.And(dx >= dxl, dx <= dxh,
+                                           dy >= dyl, dy <= dyh)))
         s.add(st[k + 1][0] == x + dx, st[k + 1][1] == y + dy,
               st[k + 1][2] == v + DT * u1, st[k + 1][3] == th + DT * u2)
 
@@ -166,24 +181,18 @@ def build(active, dactive, kind, bm, nx, nv, nth, nvd, horizon):
     return s, st
 
 
-def main():  # pylint: disable=too-many-locals
-    """Run the refinement loop and report where it stops and why."""
-    nx, nv, nvd = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
-    kind, horizon = sys.argv[4], int(sys.argv[5])
-    max_iters = int(sys.argv[6]) if len(sys.argv) > 6 else 25
-    nth = nv
-    bm = BoundedModule(load_net(NET), torch.zeros(1, 4))
-    active, dactive = seed_cells(nx, nv, nth, nvd)
-    active = with_neighbours(active, (nx, nx, nv, nth))
-    dactive = with_neighbours(dactive, (nvd, nvd))
-    print(f"{kind} net {nx}x{nv}x{nth}, disp {nvd}, horizon {horizon}")
-    print(f"  full grid would be {nx*nx*nv*nth} net + {nvd*nvd} disp cells; "
-          f"seeded with {len(active)} + {len(dactive)}")
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments,too-many-locals
+def refine(active, dactive, kind, bm, nx, nv, nth, nvd, horizon,
+           max_iters, affine_disp=False):
+    """Refine until UNSAT, until the grid is too coarse, or until max_iters.
 
+    Returns (status, active, dactive) so a caller can carry a converged cell
+    set forward to a longer horizon instead of rediscovering it from scratch.
+    """
     for it in range(max_iters):
         t0 = time.time()
         solver, st = build(active, dactive, kind, bm,
-                           nx, nv, nth, nvd, horizon)
+                           nx, nv, nth, nvd, horizon, affine_disp)
         res = solver.check()
         dt = time.time() - t0
         if res == z3.unsat:
@@ -193,10 +202,10 @@ def main():  # pylint: disable=too-many-locals
                   f"UNSAT ({dt:.1f}s)")
             print(f"  PROVED to depth {horizon} with {total} contracts "
                   f"({full / total:.0f}x fewer than the full grid)")
-            return
+            return "proved", active, dactive
         if res != z3.sat:
             print(f"  iter {it}: {res} ({dt:.1f}s)")
-            return
+            return "unknown", active, dactive
         model = solver.model()
         added, dadded = set(), set()
         for k in range(horizon + 1):
@@ -217,11 +226,52 @@ def main():  # pylint: disable=too-many-locals
         if not added and not dadded:
             print("  counterexample stays inside the covered cells: the GRID "
                   "is too coarse, adding cells cannot help")
-            return
+            return "too_coarse", active, dactive
         active |= with_neighbours(added, (nx, nx, nv, nth))
         dactive |= with_neighbours(dadded, (nvd, nvd))
     print(f"  stopped after {max_iters} iterations at "
           f"{len(active)}+{len(dactive)} cells")
+    return "exhausted", active, dactive
+
+
+def main():
+    """Ladder the horizon, carrying each converged cell set to the next.
+
+    Starting cold at the full horizon makes every iteration expensive while the
+    cell set is still being discovered.  Proving a short horizon first is cheap
+    and yields most of the cells the longer one needs.
+    """
+    nx, nv, nvd = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
+    kind, horizon = sys.argv[4], int(sys.argv[5])
+    max_iters = int(sys.argv[6]) if len(sys.argv) > 6 else 25
+    ladder = [int(v) for v in sys.argv[7].split(",")] if len(sys.argv) > 7 \
+        else [horizon]
+    # Refining the DISPLACEMENT cells makes each query cheaper but removes
+    # constraints that are doing real work: an uncovered displacement cell
+    # leaves dx and dy free and the solver walks straight through it.  The
+    # network cells are the ones worth refining, so keep the plant's in full.
+    full_disp = (sys.argv[8].lower() != "refine") if len(sys.argv) > 8 else True
+    affine_disp = sys.argv[9].lower() == "affinedisp" if len(sys.argv) > 9 else False
+    nth = nv
+    bm = BoundedModule(load_net(NET), torch.zeros(1, 4))
+    active, dactive = seed_cells(nx, nv, nth, nvd)
+    active = with_neighbours(active, (nx, nx, nv, nth))
+    dactive = ({(a, b) for a in range(nvd) for b in range(nvd)} if full_disp
+               else with_neighbours(dactive, (nvd, nvd)))
+    print(f"{kind} net {nx}x{nv}x{nth}, disp {nvd} "
+          f"({'all' if full_disp else 'refined'}, {'affine' if affine_disp else 'interval'})")
+    print(f"  full grid would be {nx*nx*nv*nth} net + {nvd*nvd} disp cells; "
+          f"seeded with {len(active)} + {len(dactive)}")
+
+    for rung in ladder:
+        print(f"--- horizon {rung} ---")
+        status, active, dactive = refine(
+            active, dactive, kind, bm, nx, nv, nth, nvd, rung,
+            max_iters, affine_disp)
+        if status != "proved":
+            print(f"  stopped at horizon {rung} with status {status}")
+            return
+    print(f"ALL RUNGS PROVED up to horizon {ladder[-1]}")
 
 
 if __name__ == "__main__":
