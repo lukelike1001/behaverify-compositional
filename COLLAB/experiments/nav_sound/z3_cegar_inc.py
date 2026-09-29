@@ -251,7 +251,7 @@ class IncrementalRefiner:
         return out
 
 
-# pylint: disable-next=too-many-locals
+# pylint: disable-next=too-many-locals,too-many-statements
 
 def _classify(model, ref, horizon):
     """Is the counterexample real, or an artefact of the over-approximation?
@@ -283,7 +283,7 @@ def _classify(model, ref, horizon):
           "the gap is over-approximation error, not a real violation")
 
 
-# pylint: disable-next=too-many-locals
+# pylint: disable-next=too-many-locals,too-many-statements
 def main():
     """Refine incrementally and report the outcome."""
     nx, nv, nvd = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
