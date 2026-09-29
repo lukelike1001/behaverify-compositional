@@ -36,9 +36,17 @@ if str(_SRC_DIR) not in sys.path:
 from dsl_with_abstract_control_to_nuxmv import (  # noqa: E402
     AbstractControlPatcher,
     Contract,
+    DeadlockError,
     RegionBound,
+    VacuityError,
+    build_initial_vacuity_guard_smv,
+    build_progress_guard_smv,
+    DECIMALS,
     ceil_to,
+    check_nuxmv_progress,
     floor_to,
+    set_invarspec,
+    verify_with_battery,
 )
 import dsl_to_nuxmv  # noqa: E402
 
@@ -601,3 +609,328 @@ class TestEndToEndNonVacuity:
         assert ("is true" in out_with) and ("is false" in out_without), (
             "Non-vacuity failure: contracts did not flip the verification verdict!"
         )
+
+
+# =============================================================================
+# 7. PROGRESS & NON-DEADLOCK GUARDS (nuXmv)
+# =============================================================================
+
+class TestProgressAndNonDeadlockGuard:
+    """
+    An unsatisfiable INVAR or deadlocked transition relation truncates paths.
+    In nuXmv, truncated paths vacuously satisfy implications like `ticks = 30 -> Goal`
+    because the antecedent `ticks = 30` is never reached.
+    The progress/non-deadlock guard ensures:
+    1. Initial state is non-empty (`INVARSPEC FALSE` returns `is false`).
+    2. Horizon is reachable without deadlock (`INVARSPEC !(ticks = 30)` returns `is false`).
+    """
+
+    def test_set_invarspec_preserves_contracts(self) -> None:
+        smv = (
+            "MODULE main\n"
+            "--------------SPECIFICATIONS\n"
+            "INVAR system.v >= 0.0;\n"
+            "INVARSPEC system.v <= 10.0;\n"
+            "--------------END OF SPECIFICATIONS\n"
+        )
+        res = set_invarspec(smv, "system.ticks != 30")
+        assert "INVAR system.v >= 0.0;" in res
+        assert "INVARSPEC system.ticks != 30;" in res
+        assert "system.v <= 10.0" not in res
+
+    def test_progress_guard_passes_on_valid_abstract_nav(self, abstract_nav_smv: str) -> None:
+        patcher = AbstractControlPatcher()
+        contracts = [
+            Contract(
+                region=[RegionBound("v_stage_0", -1.0, 1.0)],
+                target="u1_stage_0",
+                kind="interval",
+                lo=-1.0,
+                hi=1.0,
+            ),
+            Contract(
+                region=[RegionBound("v_stage_0", 1.0, 100.0)],
+                target="u1_stage_0",
+                kind="interval",
+                lo=-1.0,
+                hi=0.0,
+            ),
+            Contract(
+                region=[RegionBound("v_stage_0", -100.0, -1.0)],
+                target="u1_stage_0",
+                kind="interval",
+                lo=0.0,
+                hi=1.0,
+            ),
+        ]
+        patched_smv = patcher.patch(abstract_nav_smv, "u1_stage_0", contracts)
+        success, msg = check_nuxmv_progress(
+            patched_smv, "system.ticks_stage_0", 30, nuxmv_bin=_NUXMV_BIN
+        )
+        assert success
+        assert "reachable" in msg
+
+    def test_progress_guard_detects_empty_initial_state(self, abstract_nav_smv: str) -> None:
+        patcher = AbstractControlPatcher()
+        freed = patcher.free_control(abstract_nav_smv, "u1_stage_0")
+        # Make init unsatisfiable
+        bad_smv = freed.replace("MODULE main", "MODULE main\nINVAR system.v_stage_0 > 100.0;\n")
+
+        with pytest.raises(VacuityError, match="(?i)initial state is empty"):
+            check_nuxmv_progress(bad_smv, "system.ticks_stage_0", 30, nuxmv_bin=_NUXMV_BIN)
+
+    def test_progress_guard_detects_deadlock_before_horizon(self, abstract_nav_smv: str) -> None:
+        patcher = AbstractControlPatcher()
+        contracts = [
+            Contract(
+                region=[RegionBound("v_stage_0", -1.0, 1.0)],
+                target="u1_stage_0",
+                kind="interval",
+                lo=-1.0,
+                hi=1.0,
+            ),
+        ]
+        patched = patcher.patch(abstract_nav_smv, "u1_stage_0", contracts)
+        # Artificially deadlock after step 1: require v > 10.0 which cannot be reached in 1 step
+        deadlocked_smv = patched.replace(
+            "MODULE main",
+            "MODULE main\nINVAR (system.ticks_stage_0 >= 1) -> (system.v_stage_0 > 10.0);\n"
+        )
+
+        with pytest.raises(DeadlockError, match="(?i)unreachable|deadlock"):
+            check_nuxmv_progress(deadlocked_smv, "system.ticks_stage_0", 30, nuxmv_bin=_NUXMV_BIN)
+
+    def test_mechanically_demonstrate_deadlock_vacuity_trap(self, abstract_nav_smv: str) -> None:
+        """
+        Adversarial proof:
+        Show that without the progress guard, a deadlocked model proves a completely
+        FALSE claim (at ticks=30, x is 9999.0) as TRUE in nuXmv, but check_nuxmv_progress catches it.
+        """
+        patcher = AbstractControlPatcher()
+        contracts = [
+            Contract(
+                region=[RegionBound("v_stage_0", -1.0, 1.0)],
+                target="u1_stage_0",
+                kind="interval",
+                lo=-1.0,
+                hi=1.0,
+            ),
+        ]
+        patched = patcher.patch(abstract_nav_smv, "u1_stage_0", contracts)
+
+        # Add artificial deadlock at step 1: require v > 10.0 which cannot be reached in 1 step from v=0 with |u1|<=1
+        deadlocked_smv = patched.replace(
+            "MODULE main",
+            "MODULE main\nINVAR (system.ticks_stage_0 >= 1) -> (system.v_stage_0 > 10.0);\n"
+        )
+
+        # Put a completely false claim about the horizon state
+        false_spec_smv = set_invarspec(deadlocked_smv, "(system.ticks_stage_0 = 30) -> (system.x_stage_0 = 9999.0)")
+
+        ret, out, err = run_nuxmv_interactive(false_spec_smv)
+        assert ret == 0
+        # Demonstrating the trap: nuXmv says it is TRUE!
+        assert "is true" in out, "Vacuity trap demonstration failed: nuXmv did not report is true on deadlocked implication!"
+
+        # Now verify that our progress guard blocks this model!
+        with pytest.raises(DeadlockError):
+            check_nuxmv_progress(false_spec_smv, "system.ticks_stage_0", 30, nuxmv_bin=_NUXMV_BIN)
+
+
+# =============================================================================
+# 8. VALIDATION BATTERY (Phase 5 automated test suite)
+# =============================================================================
+
+class TestValidationBattery:
+    """
+    Phase 5 validation battery: every trusted verdict must pass:
+    1. consistency guard
+    2. progress/non-deadlock guard
+    3. strip-contracts-must-fail
+    4. drop-one-contract-must-fail
+    5. trajectory-admission check
+    """
+
+    @pytest.fixture
+    def valid_contracts(self) -> list[Contract]:
+        return [
+            Contract(
+                region=[RegionBound("v_stage_0", -1.0, 1.0)],
+                target="u1_stage_0",
+                kind="interval",
+                lo=-1.0,
+                hi=1.0,
+            ),
+            Contract(
+                region=[RegionBound("v_stage_0", 1.0, 100.0)],
+                target="u1_stage_0",
+                kind="interval",
+                lo=-1.0,
+                hi=0.0,
+            ),
+            Contract(
+                region=[RegionBound("v_stage_0", -100.0, -1.0)],
+                target="u1_stage_0",
+                kind="interval",
+                lo=0.0,
+                hi=1.0,
+            ),
+        ]
+
+    def test_battery_passes_on_sound_model(self, abstract_nav_smv: str, valid_contracts: list[Contract]) -> None:
+        results = verify_with_battery(
+            unpatched_smv=abstract_nav_smv,
+            control_var="u1_stage_0",
+            contracts=valid_contracts,
+            horizon_var="system.ticks_stage_0",
+            horizon_val=30,
+            nuxmv_bin=_NUXMV_BIN,
+        )
+        assert results["consistency_guard"] is True
+        assert results["progress_guard"] is True
+        assert results["strip_contracts_fails"] is True
+        assert results["drop_one_contract_fails"] is True
+        assert results["specification_verified"] is True
+
+    def test_battery_trajectory_admission_check(self, abstract_nav_smv: str, valid_contracts: list[Contract]) -> None:
+        # Trajectory that stays within contract bounds
+        valid_traj = [
+            {"v_stage_0": 0.0, "u1_stage_0": 0.0},
+            {"v_stage_0": 1.5, "u1_stage_0": -0.5},
+            {"v_stage_0": -1.5, "u1_stage_0": 0.5},
+        ]
+        res = verify_with_battery(
+            unpatched_smv=abstract_nav_smv,
+            control_var="u1_stage_0",
+            contracts=valid_contracts,
+            horizon_var="system.ticks_stage_0",
+            horizon_val=30,
+            nuxmv_bin=_NUXMV_BIN,
+            reference_trajectory=valid_traj,
+        )
+        assert res["trajectory_admission"] is True
+
+        # Trajectory violating contract bounds: at v=1.5 (region 2, requires u <= 0.0), control is +0.5
+        invalid_traj = [
+            {"v_stage_0": 1.5, "u1_stage_0": 0.5},
+        ]
+        with pytest.raises(ValueError, match="(?i)trajectory admission failure"):
+            verify_with_battery(
+                unpatched_smv=abstract_nav_smv,
+                control_var="u1_stage_0",
+                contracts=valid_contracts,
+                horizon_var="system.ticks_stage_0",
+                horizon_val=30,
+                nuxmv_bin=_NUXMV_BIN,
+                reference_trajectory=invalid_traj,
+            )
+
+    def test_battery_blocks_inconsistent_contracts(self, abstract_nav_smv: str) -> None:
+        contradictory = [
+            Contract(region=[RegionBound("v_stage_0", -1.0, 1.0)], target="u1_stage_0", kind="interval", lo=0.0, hi=0.5),
+            Contract(region=[RegionBound("v_stage_0", 0.0, 2.0)], target="u1_stage_0", kind="interval", lo=0.6, hi=1.0),
+        ]
+        with pytest.raises(VacuityError, match="(?i)inconsistent contracts"):
+            verify_with_battery(
+                unpatched_smv=abstract_nav_smv,
+                control_var="u1_stage_0",
+                contracts=contradictory,
+                horizon_var="system.ticks_stage_0",
+                horizon_val=30,
+                nuxmv_bin=_NUXMV_BIN,
+            )
+
+    def test_battery_blocks_deadlocked_model(self, abstract_nav_smv: str, valid_contracts: list[Contract]) -> None:
+        deadlocked = abstract_nav_smv.replace(
+            "MODULE main",
+            "MODULE main\nINVAR (system.ticks_stage_0 >= 1) -> (system.v_stage_0 > 10.0);\n"
+        )
+        with pytest.raises(DeadlockError):
+            verify_with_battery(
+                unpatched_smv=deadlocked,
+                control_var="u1_stage_0",
+                contracts=valid_contracts,
+                horizon_var="system.ticks_stage_0",
+                horizon_val=30,
+                nuxmv_bin=_NUXMV_BIN,
+            )
+
+
+
+
+class TestAffineContracts:
+    """
+    The affine kind keeps CROWN's linear relaxation instead of concretizing it.
+
+    The soundness-critical part is the rounding pad: rounding a COEFFICIENT
+    can break the bound at some point of the region, because the error is
+    multiplied by the state value rather than standing alone.
+    """
+
+    @staticmethod
+    def _region():
+        return [RegionBound("system.v", -2.0, -1.5),
+                RegionBound("system.th", 0.0, 0.5)]
+
+    def test_affine_renders_linear_terms(self):
+        contract = Contract(region=self._region(), target="u1", kind="affine",
+                            lo=-0.9, hi=-0.6,
+                            coeffs=(("v", 0.2), ("th", -0.04)))
+        invar = contract.to_invar("u1")
+        assert "0.2 * system.v" in invar
+        assert "-0.04 * system.th" in invar
+        assert invar.count("system.u1") == 2
+
+    def test_affine_requires_coeffs(self):
+        with pytest.raises(ValueError, match="needs 'coeffs'"):
+            Contract(region=self._region(), target="u1", kind="affine",
+                     lo=0.0, hi=1.0)
+
+    def test_affine_rejects_empty_interval(self):
+        with pytest.raises(ValueError, match="empty interval"):
+            Contract(region=self._region(), target="u1", kind="affine",
+                     lo=1.0, hi=0.0, coeffs=(("v", 0.2),))
+
+    def test_affine_rejects_unbounded_coefficient(self):
+        """A coefficient on a variable the region does not bound has no
+        finite extent, so no sound pad can be computed for it."""
+        with pytest.raises(ValueError, match="does not bound them"):
+            Contract(region=self._region(), target="u1", kind="affine",
+                     lo=0.0, hi=1.0, coeffs=(("x", 1.0),))
+
+    def test_rounding_pad_widens_the_bound(self):
+        """A coefficient needing rounding must push the constants OUTWARD."""
+        exact = Contract(region=self._region(), target="u1", kind="affine",
+                         lo=-0.5, hi=0.5, coeffs=(("v", 0.25),))
+        rounded = Contract(region=self._region(), target="u1", kind="affine",
+                           lo=-0.5, hi=0.5,
+                           coeffs=(("v", 0.2500000123456789),))
+        assert rounded._rounding_pad() > exact._rounding_pad() == 0.0
+
+    def test_mechanically_demonstrate_naive_affine_rounding_is_unsound(self):
+        """
+        Without the pad, a rounded coefficient can EXCLUDE a real behaviour.
+
+        Take a true lower bound f(v) >= c*v with c and v negative, so that
+        c*v is positive and large.  Rounding c toward zero raises the claimed
+        lower bound above the true value: the contract now forbids something
+        the system actually does.
+        """
+        coef = 0.2500004999
+        region = [RegionBound("system.v", -2.0, -2.0)]
+        contract = Contract(region=region, target="u1", kind="affine",
+                            lo=0.0, hi=1.0, coeffs=(("v", coef),))
+        pad = contract._rounding_pad()
+        naive = round(coef, DECIMALS) * -2.0          # what the SMV computes
+        exact = coef * -2.0                           # the certified bound
+        assert naive > exact, "this coefficient must round the wrong way"
+        assert pad >= naive - exact, "the pad must cover the whole error"
+
+    def test_affine_and_interval_agree_when_coefficients_vanish(self):
+        """With zero coefficients an affine contract degenerates to interval."""
+        region = self._region()
+        affine = Contract(region=region, target="u1", kind="affine",
+                          lo=-0.9, hi=-0.6, coeffs=(("v", 0.0),))
+        interval = Contract(region=region, target="u1", kind="interval",
+                            lo=-0.9, hi=-0.6)
+        assert affine.guarantee_smv("u1") == interval.guarantee_smv("u1")
