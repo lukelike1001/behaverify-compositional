@@ -295,8 +295,11 @@ def main():
     dradii = cell_radii(nvd, nvd, nvd)[2:]
     plant = expand(dseed, (nvd, nvd), dradii) if len(sys.argv) > 6 \
         and sys.argv[6].lower() == "seedplant" else None
-    aff = len(sys.argv) > 7 and sys.argv[7].lower() == "affineplant"
-    ref = IncrementalRefiner(nx, nv, nth, nvd, horizon, plant, aff)
+    modes = {a.lower() for a in sys.argv[7:]}
+    ref = IncrementalRefiner(nx, nv, nth, nvd, horizon, plant,
+                             "affineplant" in modes, "affinenet" in modes)
+    if modes:
+        print(f"  contract forms: {sorted(modes)}")
     active = expand(active, (nx, nx, nv, nth), radii)
     print(f"  coverage radii (cells per axis): net {radii}, plant {dradii}")
     print(f"incremental, net {nx}x{nv}x{nth}, disp {nvd} "
