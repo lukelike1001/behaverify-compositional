@@ -13,7 +13,23 @@ NSBT verification actually needs.
 | **`ANSR_behaverify_A_star_net/scaling_network/real.tree`** | **2** | **1** | **✓ `use_reals`** |
 | NAV (`nn-nav-set.tree`) | **0** | 2 | ✓ |
 
-**`real.tree` is the only file in the repository with all three.**
+**`real.tree` is the only file with all three — but only on a type technicality.**
+
+> **Correction, after reading its transition relation rather than its
+> declarations.** `drone_x` is `VAR REAL`, but it starts at 3 and updates only as
+> `(max, min_val, (sub, drone_x, 1))` / `(min, max_val, (add, drone_x, 1))` —
+> ±1, clamped to `[0,6]`. Destinations come from `(loop, loop_var, [min_val,
+> max_val])`, i.e. integers. Obstacles have `max_obstacle_size := 0`, so they are
+> lattice points. The non-determinism clause is commented out.
+>
+> **The reachable set is 49 integer positions in a 7×7 grid.** `use_reals` is a
+> type declaration that makes nuXmv use real arithmetic — which matters for the
+> network's `config { real }` symbolic encoding — not a continuous state space.
+> `real.tree` is grid world wearing REAL annotations.
+>
+> **Corrected conclusion: nothing in the 358 trees has BT structure AND a
+> genuinely continuous reachable set AND a neural network.** The gap is real and
+> unfilled.
 
 ## What it contains
 
