@@ -65,10 +65,19 @@ class RegionBound:
     lo: float | int
     hi: float | int
 
+    def __post_init__(self) -> None:
+        if self.lo > self.hi:
+            raise ValueError(f"empty region on {self.var}: [{self.lo}, {self.hi}]")
+
+    @property
+    def bare(self) -> str:
+        """Name without a 'system.' prefix, so callers may pass either form."""
+        return self.var[len("system."):] if self.var.startswith("system.") else self.var
+
     def to_smv(self) -> str:
         """Render this dimension as an SMV conjunct."""
-        return (f"system.{self.var} >= {_literal(self.lo)} & "
-                f"system.{self.var} <= {_literal(self.hi)}")
+        return (f"system.{self.bare} >= {_literal(self.lo)} & "
+                f"system.{self.bare} <= {_literal(self.hi)}")
 
 
 @dataclass(frozen=True)
@@ -133,8 +142,14 @@ class AbstractControlPatcher:
     notes: list[str] = field(default_factory=list)
 
     def free_name(self, var: str) -> str:
-        """Name of the unconstrained stand-in for ``var``."""
-        return f"{var}{self.free_suffix}"
+        """
+        Name of the unconstrained stand-in for ``var``.
+
+        The stage suffix is dropped so both ``u1`` and ``u1_stage_0`` yield
+        ``u1_free``, matching the proof-of-concept patch.
+        """
+        base = re.sub(r"_stage_\d+$", "", var)
+        return f"{base}{self.free_suffix}"
 
     def _var_type(self, smv: str, var: str) -> str:
         match = re.search(rf"^\s*{re.escape(var)} : ([^;]+);", smv, re.MULTILINE)
@@ -191,6 +206,11 @@ class AbstractControlPatcher:
         """Emit contracts as INVAR lines at MODULE main scope."""
         if not contracts:
             return smv
+        conflicts = self.check_consistency(contracts)
+        if conflicts:
+            raise ValueError(
+                "inconsistent contracts would make every proof vacuous; "
+                f"conflicting pairs (by index): {conflicts}")
         targets = {c.target for c in contracts}
         if len(targets) != 1:
             raise ValueError(f"contracts target multiple variables: {sorted(targets)}")
