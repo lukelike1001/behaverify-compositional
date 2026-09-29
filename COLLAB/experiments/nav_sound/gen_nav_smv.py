@@ -35,17 +35,20 @@ def displacement_bounds(vlo, vhi, tlo, thi, samples=400):
             (floor_to(dy.min() - pad), ceil_to(dy.max() + pad)))
 
 
-def build(nx: int, nv: int, nvd: int | None = None,
+def build(nx: int, nv: int, nvd: int | None = None, nth: int | None = None,
           xr=(-1.0, 3.5), vr=(-2.0, 2.0)) -> str:
+    # theta gets its own resolution: it spans 2*pi and the controller is far
+    # more sensitive to heading than to speed.  Defaults to nv (prior behaviour).
+    nth = nth or nv
     xs = np.linspace(*xr, nx + 1); vs = np.linspace(*vr, nv + 1)
-    ts = np.linspace(-math.pi, math.pi, nv + 1)
+    ts = np.linspace(-math.pi, math.pi, nth + 1)
     bm = BoundedModule(load_net(NET), torch.zeros(1, 4))
 
     los, his, cells = [], [], []
     for i in range(nx):
         for j in range(nx):
             for a in range(nv):
-                for b in range(nv):
+                for b in range(nth):
                     lo = [xs[i], xs[j], vs[a], ts[b]]
                     hi = [xs[i+1], xs[j+1], vs[a+1], ts[b+1]]
                     los.append(lo); his.append(hi); cells.append((lo, hi))
@@ -96,8 +99,9 @@ def build(nx: int, nv: int, nvd: int | None = None,
 if __name__ == "__main__":
     nx, nv = int(sys.argv[1]), int(sys.argv[2])
     nvd = int(sys.argv[4]) if len(sys.argv) > 4 else None
-    text = build(nx, nv, nvd)
-    tag = f"{nx}_{nv}" + (f"_d{nvd}" if nvd else "")
+    nth = int(sys.argv[5]) if len(sys.argv) > 5 else None
+    text = build(nx, nv, nvd, nth)
+    tag = f"{nx}_{nv}" + (f"_d{nvd}" if nvd else "") + (f"_t{nth}" if nth else "")
     out = pathlib.Path(f"COLLAB/experiments/nav_sound/nav_{tag}_"
                        f"{sys.argv[3] if len(sys.argv)>3 else 'obstacle'}.smv")
     out.write_text(text)

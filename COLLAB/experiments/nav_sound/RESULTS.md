@@ -121,3 +121,76 @@ obstacle from any of 9 starts.
 This is not "NAV fails". It is a measured horizon with the binding constraint
 identified at each stage: displacement bloat first, then network bound width,
 then solver capacity.
+
+---
+
+# Attack 3 — non-uniform / anisotropic grids. **Dead, and cleanly so.**
+
+Every prior configuration had `nx = 2*nv`, and `gen_nav_smv.py` additionally
+hardcoded `nth = nv`, so θ always got the same cell count as v despite spanning
+2π. Both couplings are now broken. Neither mattered.
+
+## 3a — reallocating the same budget changes nothing
+
+| config | net contracts | disp | total | verdict |
+|---|---|---|---|---|
+| net 8x4 + disp 64 (prior best) | 1,024 | 4,096 | 5,120 | `is false` at k=8 |
+| net 4x16 + disp 32 | 4,096 | 1,024 | 5,120 | `is false` at k=8 |
+| net 8x8 + disp 32 | 4,096 | 1,024 | 5,120 | `is false` at k=8 |
+
+Identical budget, opposite allocations, **identical horizon**.
+
+## 3b — which axis actually drives the bound?
+
+CROWN `u1` interval width at the cell where the abstraction fails (the true
+trajectory's k=8 state), varying one axis at a time from a 8/8/8 baseline:
+
+| refinement | nx | nv | nth |
+|---|---|---|---|
+| 4 | 2.507 | 2.077 | 2.290 |
+| 8 (base) | 2.002 | 2.002 | 2.002 |
+| 16 | 1.704 | 1.382 | 1.771 |
+| 32 | 1.479 | 1.050 | 1.656 |
+| 64 | 1.399 | **0.892** | 1.596 |
+
+**Velocity is the strong axis; θ is the weakest** — the opposite of the
+hypothesis. No single axis alone escapes 0.89.
+
+## 3c — why this kills non-uniform grids specifically
+
+A non-uniform grid buys precision by refining *finely near the obstacle* — that
+is, in **x and y**. Those are the two weakest axes (2.002 → 1.399 at 64×). The
+blowup lives in **velocity** space, which has no spatial locality near the
+obstacle to exploit. A non-uniform spatial grid refines the wrong dimension.
+
+## 3d — the real size of the gap
+
+At the failure cell the width is **2.002** — exactly the vacuous bound
+(`u1 ∈ [-1,1]`), i.e. zero information. Joint refinement:
+
+| nx | nv | nth | contracts | width |
+|---|---|---|---|---|
+| 8 | 8 | 8 | 4,096 | 2.002 |
+| 8 | 16 | 16 | 16,384 | 1.116 |
+| 8 | 32 | 16 | 32,768 | 0.802 |
+| 16 | 64 | 32 | 524,288 | 0.423 |
+| 32 | 64 | 64 | 4,194,304 | 0.192 |
+
+nuXmv's ceiling is 6,000–8,000. The gap is **4× to 85×** depending on the width
+one is willing to call informative — not the ~2× that a cleverer grid could
+plausibly close.
+
+## 3e — the benchmark is not degenerate
+
+The true trajectory's minimum distance to the obstacle is **0.2445**, at k=11,
+position (0.980, 2.244), from start (2.90, 3.05). NAV is provable in principle;
+the obstruction is solver capacity, not a zero-margin specification.
+
+## Reproduce
+
+```bash
+python3 COLLAB/experiments/nav_sound/margin_check.py        # 3e
+python3 COLLAB/experiments/nav_sound/slack_check.py 8 8     # width along trajectory
+python3 COLLAB/experiments/nav_sound/theta_sensitivity.py   # 3b
+python3 COLLAB/experiments/nav_sound/gen_nav_smv.py 8 8 obstacle 32    # 3a
+```
