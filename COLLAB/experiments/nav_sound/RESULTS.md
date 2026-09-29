@@ -450,3 +450,35 @@ python3 COLLAB/experiments/nav_sound/drift_profile.py 8 8 32 9 1
 python3 COLLAB/experiments/nav_sound/drift_profile.py 32 32 32 9 1
 python3 COLLAB/experiments/nav_sound/cell_span.py 8 8 128 9
 ```
+
+
+---
+
+# 11 — affine contracts: right medicine, wrong price
+
+The feedback-loop diagnosis says affine contracts are exactly what a
+union-over-cells problem needs: an affine bound **follows the state** instead of
+being a box per cell, so the union over several spanned cells is barely wider
+than one cell's. That is a far better motivation than the one under which they
+were first tried.
+
+They still do not help, because they are out of reach at the required scale.
+With affine network contracts, net 8³ + disp 32 + horizon 8 — the *smallest*
+configuration that proves anything, where the interval version takes **8.5 s** —
+produced no verdict in **15 minutes** of Z3. At disp 128 it produced nothing.
+
+So there **is** a precision/tractability frontier, contrary to the retraction in
+§5 — that retraction was right that nuXmv is not where the frontier lies, and
+wrong to conclude there is none. It sits between the 514-contract model Z3
+decides in 14.6 s and the few thousand contracts NAV needs.
+
+# Final position
+
+| | |
+|---|---|
+| proved | NAV obstacle avoidance to **k=8 of 30**, soundly |
+| cost | **192 network + 2,335 plant contracts, 8.5 s** (Z3) |
+| grid | holds on grids up to 1,048,576 cells — 128× past nuXmv's capacity |
+| proof obligation | BMC to the horizon is **complete**; no inductive invariant needed |
+| why it stops | state spread exceeds a cell → admitted control is the union of spanned cells' contracts → refinement gains ~10% per 4× (≈40,000× finer grid needed) |
+| what would fix it | contracts whose bound follows the state (affine) — correct in principle, ~100× too slow |
