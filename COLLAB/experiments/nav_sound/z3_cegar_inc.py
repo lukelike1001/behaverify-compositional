@@ -28,7 +28,7 @@ sys.path.insert(0, "COLLAB/experiments/nav_sound")
 from gen_nav_contracts import load_net, crown_bounds, floor_to, ceil_to  # noqa: E402
 from gen_nav_affine import NET                                           # noqa: E402
 from gen_nav_smv import displacement_bounds                              # noqa: E402
-from z3_cegar import cell_index, cell_box, seed_cells, with_neighbours   # noqa: E402
+from z3_cegar import cell_index, cell_box, seed_cells                   # noqa: E402
 from auto_LiRPA import BoundedModule                                     # noqa: E402
 
 DT = 0.2
@@ -75,7 +75,7 @@ class IncrementalRefiner:
         self.nvd, self.horizon = nvd, horizon
         self.bm = BoundedModule(load_net(NET), torch.zeros(1, 4))
         self.solver = z3.Solver()
-        self.emitted = set()
+        self.emitted = set()          # (level, i, j, a, b)
         self.plant_emitted = set()
         self.plant_cells = (sorted(plant_cells) if plant_cells is not None
                             else [(a, b) for a in range(nvd)
@@ -113,12 +113,21 @@ class IncrementalRefiner:
                      for k in range(self.horizon + 1)]))
 
     # pylint: disable-next=too-many-locals
-    def add_cells(self, keys):
-        """Assert the network contract for each not-yet-emitted cell."""
-        fresh = [k for k in keys if k not in self.emitted]
+    def add_cells(self, keys, level=0):
+        """Assert the network contract for each not-yet-emitted cell.
+
+        ``level`` L means the grid is subdivided 2^L times per axis.  A parent
+        cell's contract and its children's are BOTH valid for the true network,
+        so adding finer contracts without retracting coarser ones is sound and
+        strictly tightens the abstraction - which is what lets refinement by
+        splitting run incrementally.
+        """
+        scale = 2 ** level
+        fresh = [(level,) + k for k in keys if (level,) + k not in self.emitted]
         if not fresh:
             return 0
-        boxes = [cell_box(k, self.nx, self.nv, self.nth) for k in fresh]
+        nx, nv, nth = self.nx * scale, self.nv * scale, self.nth * scale
+        boxes = [cell_box(k[1:], nx, nv, nth) for k in fresh]
         lo = np.array([b[0] for b in boxes], np.float32)
         hi = np.array([b[1] for b in boxes], np.float32)
         clb, cub = crown_bounds(self.bm, lo, hi)
@@ -135,6 +144,26 @@ class IncrementalRefiner:
                     u1 <= ceil_to(min(float(cub[n][0]), 1.0)))))
         self.emitted.update(fresh)
         return len(fresh)
+
+    def split_cells(self, model, level):
+        """Add the counterexample's cells at a finer level.
+
+        Called when adding same-level cells stops helping: the counterexample
+        is inside covered cells, so the residual freedom is the CONTRACT WIDTH
+        there, and only a finer cell reduces it.
+        """
+        scale = 2 ** level
+        nx, nv, nth = self.nx * scale, self.nv * scale, self.nth * scale
+        keys = set()
+        for k in range(self.horizon + 1):
+            vals = [float(model.eval(self.state[k][i], model_completion=True)
+                          .as_fraction()) for i in range(4)]
+            keys.add((cell_index(vals[0], *XR, nx),
+                      cell_index(vals[1], *XR, nx),
+                      cell_index(vals[2], *VR, nv),
+                      cell_index(vals[3], -math.pi, math.pi, nth)))
+        return self.add_cells(expand(keys, (nx, nx, nv, nth),
+                                     cell_radii(nx, nv, nth)), level)
 
     # pylint: disable-next=too-many-locals
     def add_plant_cells(self, keys):
@@ -174,7 +203,7 @@ class IncrementalRefiner:
         return out
 
     def counterexample_cells(self, model):
-        """Cells the counterexample trace occupies."""
+        """Cells the counterexample trace occupies, at the base level."""
         out = set()
         for k in range(self.horizon + 1):
             vals = [float(model.eval(self.state[k][i], model_completion=True)
@@ -241,6 +270,7 @@ def main():
     print(f"  seeded with {len(ref.emitted)} network cells "
           f"+ {len(ref.plant_emitted)} plant contracts")
 
+    level = 0
     for it in range(max_iters):
         t0 = time.time()
         res = ref.solver.check()
@@ -257,16 +287,23 @@ def main():
             return
         model = ref.solver.model()
         cells = ref.counterexample_cells(model)
+        seen0 = {k[1:] for k in ref.emitted if k[0] == 0}
         added = ref.add_cells(
-            expand(cells - ref.emitted, (nx, nx, nv, nth), radii))
+            expand(cells - seen0, (nx, nx, nv, nth), radii))
         pcells = ref.counterexample_plant_cells(model)
         padded = ref.add_plant_cells(
             expand(pcells - ref.plant_emitted, (nvd, nvd), dradii))
         print(f"  iter {it}: {len(ref.emitted)}+{len(ref.plant_emitted)} "
               f"cells -> SAT ({dt:.1f}s), +{added}+{padded} new")
         if not added and not padded:
-            print("  counterexample stays inside the covered cells: the GRID "
-                  "is too coarse, adding cells cannot help")
+            level += 1
+            split = ref.split_cells(model, level)
+            if split:
+                print(f"  iter {it}: stalled -> SPLIT to level {level} "
+                      f"(cells 2^{level}x finer), +{split} contracts")
+                continue
+            print("  counterexample stays inside the covered cells, and "
+                  "splitting added nothing further")
             ranges = []
             for i, name in enumerate(("x", "y", "v", "th")):
                 vals = [float(model.eval(ref.state[k][i],
