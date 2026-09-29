@@ -322,3 +322,53 @@ python3 COLLAB/experiments/nav_sound/z3_cegar.py 32 32 128 interval 8 20
 python3 COLLAB/experiments/nav_sound/reachable_cells.py
 python3 COLLAB/experiments/nav_sound/theta_sensitivity.py
 ```
+
+
+---
+
+# 9 — where this actually leaves NAV
+
+**The proved horizon did not move.** It is still k=8 of 30, the same number
+nuXmv gave. Everything around it changed; the number did not.
+
+## Measured boundaries
+
+| net grid | disp | proves | fails |
+|---|---|---|---|
+| 8³ | 128 | k=8 | k=9 |
+| 32³ | 128 | k=8 | k=9 |
+| 8³ | 256, 512 | — | k=9 |
+| 32³ | 256 | — | k=9 |
+| 128³ | 256 | could not seed within 1500 s | — |
+
+## Why k=9 resists — two wrong guesses, then the answer
+
+- **Not** the abstract state escaping the contract grid, where no contract
+  applies. The stalled counterexample sits at `x ∈ [1.972, 2.900]`,
+  `v ∈ [−1.323, 0.000]` — well inside the modelled box.
+- **Not** coverage gaps. Expanding by ±1 *cell* covers a shrinking *physical*
+  region as the grid refines, so a finer grid should slip out of the covered
+  set more easily. Replacing it with a fixed physical margin did not move the
+  barrier.
+- **It is contract width**, and the budget model accounts for it exactly: k=9
+  needs `w ≤ 0.302`; net 32³ delivers `w = 0.317`. Just short.
+
+The counterexample is confirmed **spurious**: simulating the true closed loop
+from its own initial state (2.900, 2.938) clears the obstacle by 0.436.
+
+## What did improve
+
+| | before tonight | now |
+|---|---|---|
+| contracts for the k=8 proof | 16,562 | **1,327** |
+| time | 190 s | **~15 s** |
+| grid it holds on | 4,096 cells | **1,048,576** (128× past nuXmv) |
+| proof obligation | assumed to need an inductive invariant | **BMC to horizon is complete** |
+| distance to k=30 | unknown | `w ≤ 0.0272` needed; 128³ gives 0.0729 |
+
+The wall moved from *"we cannot express this"* to *"we need `w ≤ 0.0272` and
+the finest grid we can currently seed gives 0.0729"* — a stated, finite gap
+rather than a mystery. Closing it needs either a grid we cannot yet seed, or
+a contract form that is tighter per cell without being denser per query — and
+§8 shows the obvious candidate, affine contracts, is denser per query by more
+than it gains.

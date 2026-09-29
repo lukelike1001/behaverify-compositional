@@ -36,6 +36,35 @@ XR, VR = (-1.0, 3.5), (-2.0, 2.0)
 OBS = ((1.0, 2.0), (1.0, 2.0))
 
 
+
+def cell_radii(nx, nv, nth, margin=(0.30, 0.30, 0.30, 0.30)):
+    """How many cells per axis cover a fixed PHYSICAL margin.
+
+    Expanding by one cell per axis covers a shrinking physical region as the
+    grid refines, so a finer grid slips out of the covered set more easily -
+    and an uncovered cell is UNCONSTRAINED, which costs more than the tighter
+    bounds gain.  Keeping the margin physical rather than index-based makes
+    refinement monotone in the way one expects.
+    """
+    widths = ((XR[1] - XR[0]) / nx, (XR[1] - XR[0]) / nx,
+              (VR[1] - VR[0]) / nv, 2 * math.pi / nth)
+    return tuple(max(1, int(round(m / w))) for m, w in zip(margin, widths))
+
+
+def expand(keys, limits, radii):
+    """Every cell within `radii` of a given cell, per axis, clipped."""
+    out = set()
+    for key in keys:
+        for axis, (limit, rad) in enumerate(zip(limits, radii)):
+            for step in range(-rad, rad + 1):
+                nb = list(key)
+                nb[axis] += step
+                if 0 <= nb[axis] < limit:
+                    out.add(tuple(nb))
+        out.add(key)
+    return out
+
+
 # pylint: disable-next=too-many-instance-attributes
 class IncrementalRefiner:
     """Holds one Z3 solver and grows its contract set in place."""
@@ -198,10 +227,13 @@ def main():
     max_iters = int(sys.argv[5]) if len(sys.argv) > 5 else 40
     nth = nv
     active, dseed = seed_cells(nx, nv, nth, nvd)
-    plant = with_neighbours(dseed, (nvd, nvd)) if len(sys.argv) > 6 \
+    radii = cell_radii(nx, nv, nth)
+    dradii = cell_radii(nvd, nvd, nvd)[2:]
+    plant = expand(dseed, (nvd, nvd), dradii) if len(sys.argv) > 6 \
         and sys.argv[6].lower() == "seedplant" else None
     ref = IncrementalRefiner(nx, nv, nth, nvd, horizon, plant)
-    active = with_neighbours(active, (nx, nx, nv, nth))
+    active = expand(active, (nx, nx, nv, nth), radii)
+    print(f"  coverage radii (cells per axis): net {radii}, plant {dradii}")
     print(f"incremental, net {nx}x{nv}x{nth}, disp {nvd} "
           f"({'seeded' if plant else 'all'}), horizon {horizon}")
     ref.add_cells(active)
@@ -226,10 +258,10 @@ def main():
         model = ref.solver.model()
         cells = ref.counterexample_cells(model)
         added = ref.add_cells(
-            with_neighbours(cells - ref.emitted, (nx, nx, nv, nth)))
+            expand(cells - ref.emitted, (nx, nx, nv, nth), radii))
         pcells = ref.counterexample_plant_cells(model)
         padded = ref.add_plant_cells(
-            with_neighbours(pcells - ref.plant_emitted, (nvd, nvd)))
+            expand(pcells - ref.plant_emitted, (nvd, nvd), dradii))
         print(f"  iter {it}: {len(ref.emitted)}+{len(ref.plant_emitted)} "
               f"cells -> SAT ({dt:.1f}s), +{added}+{padded} new")
         if not added and not padded:
