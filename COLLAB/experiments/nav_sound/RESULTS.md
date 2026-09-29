@@ -276,14 +276,23 @@ Cells outside the active set are unconstrained, so the abstraction is **coarser*
 than the fully-emitted one, never finer. That direction is exactly why `UNSAT`
 at any iteration is a real proof.
 
-| configuration | grid cells | contracts used | result |
+| configuration | network cells | network contracts used | result |
 |---|---|---|---|
 | net 8×8×8, disp 128, k=8 | 4,096 | 4,096 (full) | `unsat`, 57 s |
 | net 8×8×8, disp 128, k=8 | 4,096 | **34** | `unsat`, 108 s |
 | net 32×32×32, disp 128, k=8 | 1,048,576 | **165** | `unsat`, **137 s** |
 
-That last row is **128× past nuXmv's entire `INVAR` capacity**, proved with 165
-contracts — 6,355× fewer than the grid it refines.
+**These counts are network contracts only.** Every one of these runs also
+carried all `nvd²` displacement contracts (16,384 at disp 128), so the last
+row's true total is 16,549, not 165. The reduction is real but applies to the
+*network* family — which is the one that matters, since the `nx²·nv·nth`
+explosion that bounded this project lives there, and it collapsed from
+1,048,576 to 165. The grid is **128× past nuXmv's entire `INVAR` capacity**.
+
+Refining the displacement cells the same way **fails**, instructively: it cut
+iteration cost 45× (137 s → 3 s) and stopped the loop converging, because an
+uncovered displacement cell leaves `dx`, `dy` free and the solver walks straight
+through it. Refinement helps where contracts are redundant; the plant's are not.
 
 The loop also diagnoses its own limit. At disp 32 it halts with *"counterexample
 stays inside the covered cells: the grid is too coarse"* — correctly naming the
