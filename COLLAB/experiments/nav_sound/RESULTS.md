@@ -372,3 +372,71 @@ rather than a mystery. Closing it needs either a grid we cannot yet seed, or
 a contract form that is tighter per cell without being denser per query — and
 §8 shows the obvious candidate, affine contracts, is denser per query by more
 than it gains.
+
+
+---
+
+# 10 — the wall, finally characterised
+
+It is not contract count, not solver capacity, and not cell size.
+
+## 10a — the plant is binding, not the network
+
+One-sided gap in y at k=8 (how far the abstraction's lower bound sits below the
+true one; the obstacle margin is 0.2445):
+
+| network grid | plant | gap |
+|---|---|---|
+| 8³ | disp 32 | 0.595 |
+| **32³** | disp 32 | **0.594** |
+| 8³ | **disp 128** | **0.452** |
+
+Refining the **network** 4× changes it by 0.001. Refining the **plant** changes
+it by 0.143. This project has spent its effort refining the neural side while
+the binding constraint was the displacement abstraction — which is not a neural
+network at all, but `v·cos θ`, a known analytic function.
+
+## 10b — why refinement cannot win: a feedback loop
+
+Once the abstract state spans more than one cell, the control it admits is the
+**union** of the spanned cells' contracts. A finer grid gives proportionally
+*more, smaller* cells covering the same physical spread, so the union is just as
+wide. Measured from both sides: refining 8³ → 32³ tightens the per-cell `u2`
+bound from **2.80 to 0.74** and leaves the drift **unchanged**.
+
+`cell_span.py` shows θ's abstract spread growing at exactly **0.51 cells/step =
+0.40 rad/step = 2·dt·1.0** — precisely the global `|u2| ≤ 1` bound. The per-cell
+heading contracts contribute nothing beyond it.
+
+## 10c — the culprit is the heading control
+
+Contract width along the true trajectory at 8³:
+
+| k | `u1` width | `u2` width |
+|---|---|---|
+| 0 | 0.0018 | 0.1326 |
+| 1 | 0.0011 | 0.8551 |
+| 2 | 0.0011 | 0.8551 |
+| 3 | 0.0194 | **2.8041** |
+| 4 | 0.0898 | **2.8434** |
+
+The acceleration contract is essentially exact; the **heading contract is
+vacuous by step 3** — wider even than the free bound `|u2| ≤ 1` allows. That is
+why the abstraction descends into the obstacle: it is free to steer.
+
+## What this means
+
+**Interval contracts on a closed loop are self-defeating once state uncertainty
+exceeds one cell, independent of how many contracts one can afford.** The
+horizon stalls at k=8 for a structural reason, and every refinement strategy
+tried tonight — finer uniform grids, anisotropic reallocation, non-uniform
+grids, demand-driven cell addition, CEGAR cell splitting, physical-margin
+coverage — fails for the same one.
+
+## Reproduce
+
+```bash
+python3 COLLAB/experiments/nav_sound/drift_profile.py 8 8 32 9 1
+python3 COLLAB/experiments/nav_sound/drift_profile.py 32 32 32 9 1
+python3 COLLAB/experiments/nav_sound/cell_span.py 8 8 128 9
+```

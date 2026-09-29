@@ -20,6 +20,7 @@ import warnings
 
 warnings.filterwarnings("ignore")
 import numpy as np
+import onnxruntime as ort
 import torch
 import z3
 
@@ -28,6 +29,7 @@ sys.path.insert(0, "COLLAB/experiments/nav_sound")
 from gen_nav_contracts import load_net, crown_bounds, floor_to, ceil_to  # noqa: E402
 from gen_nav_affine import NET                                           # noqa: E402
 from gen_nav_smv import displacement_bounds                              # noqa: E402
+from affine_displacement import affine_displacement                      # noqa: E402
 from z3_cegar import cell_index, cell_box, seed_cells                   # noqa: E402
 from auto_LiRPA import BoundedModule                                     # noqa: E402
 
@@ -70,11 +72,13 @@ class IncrementalRefiner:
     """Holds one Z3 solver and grows its contract set in place."""
 
     # pylint: disable-next=too-many-arguments,too-many-positional-arguments
-    def __init__(self, nx, nv, nth, nvd, horizon, plant_cells=None):
+    def __init__(self, nx, nv, nth, nvd, horizon, plant_cells=None,
+                 affine_plant=False):
         self.nx, self.nv, self.nth = nx, nv, nth
         self.nvd, self.horizon = nvd, horizon
         self.bm = BoundedModule(load_net(NET), torch.zeros(1, 4))
         self.solver = z3.Solver()
+        self.affine_plant = affine_plant
         self.emitted = set()          # (level, i, j, a, b)
         self.plant_emitted = set()
         self.plant_cells = (sorted(plant_cells) if plant_cells is not None
@@ -181,12 +185,25 @@ class IncrementalRefiner:
             _, _, v, th = self.state[k]
             dx, dy = z3.Real(f"dx_{k}"), z3.Real(f"dy_{k}")
             for a, b in fresh:
-                (dxl, dxh), (dyl, dyh) = displacement_bounds(
-                    vd[a], vd[a + 1], td[b], td[b + 1])
                 g = z3.And(v >= float(vd[a]), v <= float(vd[a + 1]),
                            th >= float(td[b]), th <= float(td[b + 1]))
-                self.solver.add(z3.Implies(g, z3.And(dx >= dxl, dx <= dxh,
-                                                     dy >= dyl, dy <= dyh)))
+                if self.affine_plant:
+                    # v*cos(th)*dt is a KNOWN analytic function, so it can be
+                    # linearised about the cell centre with a sound
+                    # second-order remainder instead of concretized to a box.
+                    # It couples only v and th, so it stays cheap.
+                    cons = []
+                    for var, use_sin in ((dx, False), (dy, True)):
+                        av, ath, c, rad = affine_displacement(
+                            vd[a], vd[a + 1], td[b], td[b + 1], DT, use_sin)
+                        cons += [var >= av * v + ath * th + (c - rad),
+                                 var <= av * v + ath * th + (c + rad)]
+                    self.solver.add(z3.Implies(g, z3.And(*cons)))
+                else:
+                    (dxl, dxh), (dyl, dyh) = displacement_bounds(
+                        vd[a], vd[a + 1], td[b], td[b + 1])
+                    self.solver.add(z3.Implies(g, z3.And(
+                        dx >= dxl, dx <= dxh, dy >= dyl, dy <= dyh)))
         self.plant_emitted.update(fresh)
         return len(fresh)
 
@@ -225,7 +242,6 @@ def _classify(model, ref, horizon):
     refinement will remove it; if it stays clear, the counterexample is spurious
     and the gap is over-approximation error.
     """
-    import onnxruntime as ort
     x0 = float(model.eval(ref.state[0][0], model_completion=True).as_fraction())
     y0 = float(model.eval(ref.state[0][1], model_completion=True).as_fraction())
     sess = ort.InferenceSession(str(NET))
@@ -260,7 +276,8 @@ def main():
     dradii = cell_radii(nvd, nvd, nvd)[2:]
     plant = expand(dseed, (nvd, nvd), dradii) if len(sys.argv) > 6 \
         and sys.argv[6].lower() == "seedplant" else None
-    ref = IncrementalRefiner(nx, nv, nth, nvd, horizon, plant)
+    aff = len(sys.argv) > 7 and sys.argv[7].lower() == "affineplant"
+    ref = IncrementalRefiner(nx, nv, nth, nvd, horizon, plant, aff)
     active = expand(active, (nx, nx, nv, nth), radii)
     print(f"  coverage radii (cells per axis): net {radii}, plant {dradii}")
     print(f"incremental, net {nx}x{nv}x{nth}, disp {nvd} "

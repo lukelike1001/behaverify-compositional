@@ -64,7 +64,8 @@ def main():
     # free to enter (v, th) cells the true system never visits - notably v > 0 -
     # where only the global |dy| <= |v|*dt bound applies, which is far weaker
     # than the per-cell one.
-    ref = IncrementalRefiner(nx, nv, nth, nvd, horizon, None)
+    aff = len(sys.argv) > 6 and sys.argv[6].lower() == "affineplant"
+    ref = IncrementalRefiner(nx, nv, nth, nvd, horizon, None, aff)
     ref.add_cells(expand(active, (nx, nx, nv, nth), cell_radii(nx, nv, nth)))
     ref.add_plant_cells(ref.plant_cells)
 
