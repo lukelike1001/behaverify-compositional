@@ -567,3 +567,40 @@ collapse the disjunction into one box; the SMT encoding need not.
 If compositional wins there and loses on bare NAV, that is a clean claim about
 **when** the method is worth its cost — a better paper than either "it works" or
 "it doesn't."
+
+
+---
+
+# 14 — the branching experiment could not be built, and why
+
+§13 calls for a NAV variant *with* branching, where per-step reachability must
+collapse a disjunction into one box and the SMT encoding need not.
+`branching_nav.py` builds exactly that —
+`selector(check: cond → act: nn-nav-set, else act: nn-nav-point)`, branchable on
+any state variable — and no branch point is both **safe** and **exercised**.
+
+| branch | true closest approach | straddles |
+|---|---|---|
+| `x < 2.0` | 0.2482 (safe) | **0** — condition sits on the obstacle edge |
+| `x < 2.5` | **0.0000 (crashes)** | — |
+| `x < 2.8` | **0.0000 (crashes)** | — |
+| `x < 3.2` | 0.2442 (safe) | 0 — initial set lies entirely on one side |
+| `v < −0.4` | 0.2318 (safe) | **0** — velocity box too narrow there |
+| `v < −0.6` | 0.1114 (safe) | — |
+| `v < −0.8 … −1.4` | **0.0000 (crashes)** | — |
+
+**The branch points that would be straddled for several steps — where the union
+penalty actually bites — are exactly those where switching controllers
+mid-manoeuvre makes the TRUE system unsafe.**
+
+This is a limitation of the available artefacts, not a result about the method.
+Testing the branching hypothesis needs two controllers that are each safe over
+the whole domain and differ enough to matter; `nn-nav-point` is simply a worse
+controller that crashes when handed the critical phase.
+
+What the two runs did show: per-step reaches k=10 (k=11 on the `x < 2.0`
+split), and the SMT encoding is `unsat` through k=6.
+
+**So claim #66's implied experiment remains open**, and running it needs a
+second NAV controller that is safe on its own — training one is the prerequisite
+for the paper's central comparison.
