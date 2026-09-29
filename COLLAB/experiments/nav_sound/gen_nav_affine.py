@@ -28,6 +28,7 @@ sys.path.insert(0, "COLLAB/experiments/nav_uclid5")
 sys.path.insert(0, "COLLAB/experiments/nav_sound")
 from gen_nav_contracts import load_net, floor_to, ceil_to              # noqa: E402
 from gen_nav_smv import displacement_bounds, DT, STEPS, OBS, GOAL      # noqa: E402
+from affine_displacement import affine_displacement                    # noqa: E402
 from auto_LiRPA import BoundedModule, BoundedTensor                    # noqa: E402
 from auto_LiRPA.perturbations import PerturbationLpNorm                # noqa: E402
 
@@ -49,7 +50,7 @@ def crown_affine(bm, lo, hi):
             a["uA"].detach().numpy(), a["ubias"].detach().numpy())
 
 
-def affine_expr(coef, bias, lo, hi, lower: bool) -> str:
+def affine_expr(coef, bias, lo, hi, lower: bool, names=VARS) -> str:
     """Emit a sound affine SMV expression, padding for coefficient rounding.
 
     For a LOWER bound the rounded form must never exceed the true one, so the
@@ -62,13 +63,13 @@ def affine_expr(coef, bias, lo, hi, lower: bool) -> str:
     rb = round(b, PREC)
     pad += abs(b - rb)
     const = (floor_to(rb - pad) if lower else ceil_to(rb + pad))
-    terms = [f"{c:.6f} * {v}" for c, v in zip(rnd, VARS) if c != 0.0]
+    terms = [f"{c:.6f} * {v}" for c, v in zip(rnd, names) if c != 0.0]
     terms.append(f"{const:.6f}")
     return " + ".join(terms)
 
 
 def build(nx: int, nv: int, nvd: int | None = None, nth: int | None = None,
-          xr=(-1.0, 3.5), vr=(-2.0, 2.0)) -> str:
+          affine_disp: bool = True, xr=(-1.0, 3.5), vr=(-2.0, 2.0)) -> str:
     nth = nth or nv
     xs = np.linspace(*xr, nx + 1)
     vs = np.linspace(*vr, nv + 1)
@@ -114,12 +115,26 @@ def build(nx: int, nv: int, nvd: int | None = None, nth: int | None = None,
     td = np.linspace(-math.pi, math.pi, nvd + 1)
     for a in range(nvd):
         for b in range(nvd):
-            (dxl, dxh), (dyl, dyh) = displacement_bounds(vd[a], vd[a + 1],
-                                                         td[b], td[b + 1])
+            cell_lo = np.array([vd[a], td[b]])
+            cell_hi = np.array([vd[a + 1], td[b + 1]])
+            parts = []
+            if affine_disp:
+                for name, use_sin in (("dx", False), ("dy", True)):
+                    av, ath, c, rad = affine_displacement(
+                        vd[a], vd[a + 1], td[b], td[b + 1], DT, use_sin)
+                    lo_e = affine_expr(np.array([av, ath]), c - rad,
+                                       cell_lo, cell_hi, True, ("v", "th"))
+                    hi_e = affine_expr(np.array([av, ath]), c + rad,
+                                       cell_lo, cell_hi, False, ("v", "th"))
+                    parts.append(f"{name} >= {lo_e} & {name} <= {hi_e}")
+            else:
+                (dxl, dxh), (dyl, dyh) = displacement_bounds(
+                    vd[a], vd[a + 1], td[b], td[b + 1])
+                parts.append(f"dx >= {dxl:.6f} & dx <= {dxh:.6f}")
+                parts.append(f"dy >= {dyl:.6f} & dy <= {dyh:.6f}")
             lines.append(f"INVAR (v >= {vd[a]:.6f} & v <= {vd[a+1]:.6f} &"
                          f" th >= {td[b]:.6f} & th <= {td[b+1]:.6f}) ->"
-                         f" (dx >= {dxl:.6f} & dx <= {dxh:.6f} &"
-                         f" dy >= {dyl:.6f} & dy <= {dyh:.6f});")
+                         f" ({' & '.join(parts)});")
 
     prop = sys.argv[3] if len(sys.argv) > 3 else "obstacle"
     if prop == "obstacle":
@@ -137,9 +152,12 @@ if __name__ == "__main__":
     NX, NV = int(sys.argv[1]), int(sys.argv[2])
     NVD = int(sys.argv[4]) if len(sys.argv) > 4 else None
     NTH = int(sys.argv[5]) if len(sys.argv) > 5 else None
-    text = build(NX, NV, NVD, NTH)
+    # "net": affine network + interval displacement; "full": both affine
+    ADISP = (sys.argv[6].lower() != "interval") if len(sys.argv) > 6 else True
+    text = build(NX, NV, NVD, NTH, ADISP)
     tag = f"{NX}_{NV}" + (f"_d{NVD}" if NVD else "") + (f"_t{NTH}" if NTH else "")
-    dest = pathlib.Path(f"COLLAB/experiments/nav_sound/affine_{tag}_"
+    dest = pathlib.Path(f"COLLAB/experiments/nav_sound/"
+                        f"affine{'full' if ADISP else 'net'}_{tag}_"
                         f"{sys.argv[3] if len(sys.argv) > 3 else 'obstacle'}.smv")
     dest.write_text(text)
     print(f"  {dest.name}: {len(text.splitlines())} lines, "
