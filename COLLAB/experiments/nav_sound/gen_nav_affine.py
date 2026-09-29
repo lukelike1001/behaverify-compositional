@@ -95,6 +95,15 @@ def build(nx: int, nv: int, nvd: int | None = None, nth: int | None = None,
              " v = 0.0 & th = 0.0 & k = 0;",
              # tanh bounds the control everywhere, cell or no cell
              "INVAR u1 >= -1.0 & u1 <= 1.0 & u2 >= -1.0 & u2 <= 1.0;",
+             # |dx|,|dy| <= |v|*dt holds everywhere, including OUTSIDE the
+             # contract grid.  Without it, once |v| leaves the modelled
+             # range (it grows by up to dt per step, so up to 6 by k=30)
+             # no displacement contract applies and the abstract system
+             # can teleport.  Split on the sign of v to stay linear.
+             f"INVAR (v >= 0) -> (dx <= {DT} * v & dx >= -{DT} * v &"
+             f" dy <= {DT} * v & dy >= -{DT} * v);",
+             f"INVAR (v <= 0) -> (dx <= -{DT} * v & dx >= {DT} * v &"
+             f" dy <= -{DT} * v & dy >= {DT} * v);",
              f"TRANS next(k) = (k < {STEPS} ? k + 1 : {STEPS});",
              f"TRANS (k < {STEPS}) -> (next(x) = x + dx & next(y) = y + dy &"
              f" next(v) = v + {DT} * u1 & next(th) = th + {DT} * u2);",
@@ -150,8 +159,12 @@ def build(nx: int, nv: int, nvd: int | None = None, nth: int | None = None,
 
 if __name__ == "__main__":
     NX, NV = int(sys.argv[1]), int(sys.argv[2])
-    NVD = int(sys.argv[4]) if len(sys.argv) > 4 else None
-    NTH = int(sys.argv[5]) if len(sys.argv) > 5 else None
+    def _arg(i):
+        """Positional int argument, treating an empty string as absent."""
+        return int(sys.argv[i]) if len(sys.argv) > i and sys.argv[i] else None
+
+    NVD = _arg(4)
+    NTH = _arg(5)
     # "net": affine network + interval displacement; "full": both affine
     ADISP = (sys.argv[6].lower() != "interval") if len(sys.argv) > 6 else True
     text = build(NX, NV, NVD, NTH, ADISP)
