@@ -110,8 +110,10 @@ def main():  # pylint: disable=too-many-locals
           f"{nx**2 * nv * nth + nvd**2} contracts/step")
     t0 = time.time()
     res = s.check()
-    print(f"  {res}  ({time.time() - t0:.1f}s)   "
-          f"{'counterexample exists' if res == z3.sat else 'property holds to this depth' if res == z3.unsat else ''}")
+    verdict = ("counterexample exists" if res == z3.sat
+               else "property holds to this depth" if res == z3.unsat
+               else "")
+    print(f"  {res}  ({time.time() - t0:.1f}s)   {verdict}")
 
 
 if __name__ == "__main__":

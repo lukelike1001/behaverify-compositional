@@ -28,7 +28,9 @@ BOUND = re.compile(r"(\w+) (>=|<=) ([^&]+?)(?= & |$)")
 
 def parse(path):
     """Yield (guard_ranges, [(var, op, expr)]) for every INVAR with a guard."""
-    for line in open(path, encoding="utf-8"):
+    with open(path, encoding="utf-8") as handle:
+        lines = handle.readlines()
+    for line in lines:
         m = INVAR.match(line.strip())
         if not m:
             continue
@@ -42,17 +44,19 @@ def sample_in(guard, rng):
     """A random point satisfying the guard; unconstrained axes get a default."""
     full = {"x": (-1.0, 3.5), "y": (-1.0, 3.5), "v": (-2.0, 2.0),
             "th": (-np.pi, np.pi)}
-    return {k: rng.uniform(*guard.get(k, full[k])) for k in full}
+    return {k: rng.uniform(*guard.get(k, lims))
+            for k, lims in full.items()}
 
 
-def main():
+def main():  # pylint: disable=too-many-locals
+    """Check every sampled point against the contracts as written."""
     path = sys.argv[1]
     n = int(sys.argv[2]) if len(sys.argv) > 2 else 400
     sess = ort.InferenceSession(NET)
     inp = sess.get_inputs()[0].name
     rng = np.random.default_rng(0)
 
-    rules = [r for r in parse(path)]
+    rules = list(parse(path))
     random.Random(0).shuffle(rules)
     viol = checked = 0
     worst = -np.inf

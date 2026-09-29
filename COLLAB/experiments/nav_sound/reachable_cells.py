@@ -12,7 +12,6 @@ reachable tube, which is what a contract generator could actually restrict to.
 """
 import itertools
 import math
-import sys
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -45,6 +44,7 @@ def true_cells(nx, nv, nth, sess, inp):
     return seen
 
 
+# pylint: disable-next=too-many-locals
 def tube_cells(nx, nv, nth):
     """Sound interval over-approximation of the reachable tube, as cells.
 

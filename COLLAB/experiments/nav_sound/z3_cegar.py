@@ -19,6 +19,7 @@ tell us which cells matter.
 
 Usage: python3 .../z3_cegar.py <nx> <nv> <nvd> <kind> <K> [max_iters]
 """
+import itertools
 import math
 import sys
 import time
@@ -26,6 +27,7 @@ import warnings
 
 warnings.filterwarnings("ignore")
 import numpy as np
+import onnxruntime as ort
 import torch
 import z3
 
@@ -61,8 +63,6 @@ def seed_cells(nx, nv, nth, nvd=None):
 
     Returns the network cells, and the displacement cells when nvd is given.
     """
-    import itertools
-    import onnxruntime as ort
     sess = ort.InferenceSession(str(NET))
     inp = sess.get_inputs()[0].name
     seen, dseen = set(), set()
@@ -105,6 +105,7 @@ def with_neighbours(keys, limits):
     return out
 
 
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments,too-many-locals
 def build(active, dactive, kind, bm, nx, nv, nth, nvd, horizon):
     """A BMC query carrying contracts for the active cells only.
 

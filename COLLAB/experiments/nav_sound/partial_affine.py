@@ -29,6 +29,7 @@ from auto_LiRPA import BoundedModule                    # noqa: E402
 VARS = ("x", "y", "v", "th")
 
 
+# pylint: disable-next=too-many-locals
 def widths(bm, nx, nv, nth, keep):
     """Mean width over the cell when only axes in `keep` stay linear."""
     x, y, v, th = STATE
@@ -55,7 +56,7 @@ def widths(bm, nx, nv, nth, keep):
     return float(((pts @ (ua - la)) + (ub - lb)).mean())
 
 
-def main():
+def main():  # pylint: disable=too-many-locals
     """Compare full, partial and fully-concretized contract forms."""
     bm = BoundedModule(load_net(NET), torch.zeros(1, 4))
     for nx, nv, nth in ((6, 6, 6), (8, 8, 8)):
