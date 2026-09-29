@@ -1,0 +1,83 @@
+MODULE main
+    VAR
+        system : system_module;
+--------------SPECIFICATIONS
+-- CROWN contracts: no table was ever generated
+INVAR (system.v_stage_0 >= -1.0 & system.v_stage_0 <= 1.0) -> (system.u1_free >= -1.0 & system.u1_free <= 1.0);
+INVAR (system.v_stage_0 > 1.0) -> (system.u1_free >= -1.0 & system.u1_free <= 0.0);
+INVAR (system.v_stage_0 < -1.0) -> (system.u1_free >= 0.0 & system.u1_free <= 1.0);
+
+INVARSPEC ((system.v_stage_1 >= -10.0) & (system.v_stage_1 <= 10.0));
+
+--------------END OF SPECIFICATIONS
+
+MODULE system_module
+    CONSTANTS
+        success, failure, running, invalid;
+    DEFINE
+        resume_from_here_in_subtree__Root := -3;
+        Root.active := (ticks_stage_0 < 30);
+        --START OF BLACKBOARD DEFINITIONS
+        u1_stage_1 := u1_free;
+        v_stage_1 :=
+            case
+                !(Root.active) : v_stage_0;
+                TRUE : (v_stage_0 + (0.2 * u1_stage_1));
+            esac;
+        --END OF BLACKBOARD DEFINITIONS
+    VAR
+        node_names : define_nodes;
+        PickControl : success_DEFAULT_module();
+        Idle : success_DEFAULT_module();
+        Root : composite_sequence_without_memory_2(PickControl, Idle);
+        --START OF BLACKBOARD VARIABLES DECLARATION
+        u1_stage_0 : real;
+        u1_free : real;
+        x_stage_0 : real;
+        v_stage_0 : real;
+        ticks_stage_0 : 0..30;
+        --END OF BLACKBOARD VARIABLES DECLARATION
+    ASSIGN
+        --START OF BLACKBOARD VARIABLES INITIALIZATION
+        init(x_stage_0) := 3.0;
+        init(v_stage_0) := 0.0;
+        init(ticks_stage_0) := 0;
+        --END OF BLACKBOARD VARIABLES INITIALIZATION
+        --START OF BLACKBOARD VARIABLES TRANSITION
+        next(x_stage_0) :=
+            case
+                !(Root.active) : x_stage_0;
+                TRUE : (x_stage_0 + (0.2 * v_stage_1));
+            esac;
+        next(v_stage_0) := v_stage_1;
+        next(ticks_stage_0) :=
+            case
+                !(Root.active) : ticks_stage_0;
+                TRUE : ((ticks_stage_0 < 30) ? (ticks_stage_0 + 1) : 30);
+            esac;
+        --END OF BLACKBOARD VARIABLES TRANSITION
+
+MODULE define_nodes
+    DEFINE
+        Root := 0;
+        PickControl := 1;
+        Idle := 2;
+MODULE composite_sequence_without_memory_2(child_0, child_1)
+    CONSTANTS
+        success, failure, running, invalid;
+    DEFINE
+        status := active ? internal_status : invalid;
+        internal_status :=
+            case
+                !(child_0.internal_status = success) : child_0.internal_status;
+                !(child_1.internal_status = success) : child_1.internal_status;
+                TRUE : success;
+            esac;
+        child_0.active := active;
+        child_1.active := child_0.status = success;
+MODULE success_DEFAULT_module
+    CONSTANTS
+        success, failure, running, invalid;
+    DEFINE
+        status := active ? internal_status : invalid;
+        internal_status := success;

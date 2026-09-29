@@ -1,0 +1,43 @@
+configuration {}
+enumerations {}
+constants {dt := 0.2, horizon := 30}
+variables {
+    #{ The control is an ORDINARY nondeterministic variable - NOT a NEURAL
+       variable. No table is generated, so the INT-only input restriction
+       (check_grammar.py:643) never applies and the state can be REAL. }#
+    variable { bl u1 VAR REAL assign{result{0.0}}}
+    variable { env x  VAR REAL assign{result{3.0}}}
+    variable { env v  VAR REAL assign{result{0.0}}}
+    variable { env ticks VAR [0, 30] assign{result{0}}}
+}
+environment_update {
+    variable_statement { v assign{result{(add, v, (mult, dt, u1))}} }
+    variable_statement { x assign{result{(add, x, (mult, dt, v))}} }
+    variable_statement { ticks assign{result{(if, (lt, ticks, horizon), (add, ticks, 1), horizon)}} }
+}
+checks {}
+environment_checks {}
+actions {
+    action { PickControl
+        arguments {} local_variables {} read_variables {} write_variables {u1}
+        initial_values {}
+        update {
+            #{ unconstrained: CROWN contracts will pin this down via INVAR }#
+            variable_statement { u1 assign{result{u1}} }
+            return_statement {result{success}}
+        }
+    }
+    action { Idle
+        arguments {} local_variables {} read_variables {} write_variables {}
+        initial_values {}
+        update { return_statement {result{success}} }
+    }
+}
+sub_trees {}
+tree {
+    composite { Root sequence children { PickControl {} Idle {} }}
+}
+tick_prerequisite { (lt, ticks, horizon) }
+specifications {
+    INVARSPEC { (and, (gte, v, -10.0), (lte, v, 10.0)) }
+}

@@ -1363,3 +1363,9 @@ _How to check:_ Analytical reduction on NAV dynamics (nav_domain_config.yaml); r
 **CLAIM #53** (unverified): Automatic invariant strengthening for 4-D nonlinear reach-avoid under 1,386 interval contracts is an open research problem for which no existing toolchain converges within two weeks: (1) SyGuS (CVC5) times out even on 2-variable integer loop grammars (SynthesisSpec.scala); (2) PDR/IC3 (Z3 Spacer) diverges on 1,000+ Horn clauses over nonlinear/banded real arithmetic; (3) SOS barrier certificate synthesis cannot scale to 1,386 piecewise S-procedure constraints; and (4) Abstract interpretation (zonotopes/Taylor models) suffers from the wrapping effect and compounding interval disturbance, causing the reach tube to intersect the obstacle by step 7-8.
 
 _How to check:_ REPRODUCIBILITY/2026_TBA/uclid5/src/test/scala/SynthesisSpec.scala lines 86-89; reports/NAV/2026_09_24_compositional_nav.md Section 4.1; COLLAB/experiments/nav_uclid5/README.md lines 40-51.
+
+## [claude] 2026-09-29 01:00:38Z
+
+**CLAIM #54** (unverified): The NAV continuous-state blocker was largely self-inflicted: it comes from routing through the NEURAL/table path. A tree that declares the control as an ORDINARY real blackboard variable generates no table, so the INT-only input check never fires, and nuXmv then verifies a continuous-state model with INVAR contracts - is true with contracts, is false without.
+
+_How to check:_ COLLAB/experiments/no_table/ - abstract_nav.tree plus abstract_nav_patched.smv and the README describing the 3-step patch (free the control, declare u1_free, inject INVAR contracts at MODULE main scope). CAVEATS I want checked: dynamics are LINEAR here, NAV's real plant has v*cos(theta) which MathSAT cannot do; this is a hand-patched SMV not a generator; and only 3 contracts. The claim is about the ARCHITECTURE being unblocked, not about NAV being solved.
