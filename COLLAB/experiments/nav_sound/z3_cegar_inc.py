@@ -40,12 +40,17 @@ OBS = ((1.0, 2.0), (1.0, 2.0))
 class IncrementalRefiner:
     """Holds one Z3 solver and grows its contract set in place."""
 
-    def __init__(self, nx, nv, nth, nvd, horizon):
+    # pylint: disable-next=too-many-arguments,too-many-positional-arguments
+    def __init__(self, nx, nv, nth, nvd, horizon, plant_cells=None):
         self.nx, self.nv, self.nth = nx, nv, nth
         self.nvd, self.horizon = nvd, horizon
         self.bm = BoundedModule(load_net(NET), torch.zeros(1, 4))
         self.solver = z3.Solver()
         self.emitted = set()
+        self.plant_emitted = set()
+        self.plant_cells = (sorted(plant_cells) if plant_cells is not None
+                            else [(a, b) for a in range(nvd)
+                                  for b in range(nvd)])
         self.state = [[z3.Real(f"{n}_{k}") for n in ("x", "y", "v", "th")]
                       for k in range(horizon + 1)]
         self._frame()
@@ -58,21 +63,20 @@ class IncrementalRefiner:
         s.add(st[0][0] >= 2.9, st[0][0] <= 3.1,
               st[0][1] >= 2.9, st[0][1] <= 3.1,
               st[0][2] == 0.0, st[0][3] == 0.0)
-        vd = np.linspace(*VR, self.nvd + 1)
-        td = np.linspace(-math.pi, math.pi, self.nvd + 1)
         for k in range(self.horizon):
             x, y, v, th = st[k]
             u1, u2, dx, dy = (z3.Real(f"{n}_{k}")
                               for n in ("u1", "u2", "dx", "dy"))
             s.add(u1 >= -1, u1 <= 1, u2 >= -1, u2 <= 1)
-            for a in range(self.nvd):
-                for b in range(self.nvd):
-                    (dxl, dxh), (dyl, dyh) = displacement_bounds(
-                        vd[a], vd[a + 1], td[b], td[b + 1])
-                    g = z3.And(v >= float(vd[a]), v <= float(vd[a + 1]),
-                               th >= float(td[b]), th <= float(td[b + 1]))
-                    s.add(z3.Implies(g, z3.And(dx >= dxl, dx <= dxh,
-                                               dy >= dyl, dy <= dyh)))
+            # |dx|, |dy| <= |v|*dt holds everywhere, with no cell needed.
+            # Without it an UNREFINED displacement cell leaves dx and dy
+            # completely free and the solver walks straight through one, which
+            # is what stopped the refining loop converging.  Split on the sign
+            # of v to stay linear.
+            s.add(z3.Implies(v >= 0, z3.And(dx <= DT * v, dx >= -DT * v,
+                                            dy <= DT * v, dy >= -DT * v)))
+            s.add(z3.Implies(v <= 0, z3.And(dx <= -DT * v, dx >= DT * v,
+                                            dy <= -DT * v, dy >= DT * v)))
             s.add(st[k + 1][0] == x + dx, st[k + 1][1] == y + dy,
                   st[k + 1][2] == v + DT * u1, st[k + 1][3] == th + DT * u2)
         s.add(z3.Or([z3.And(st[k][0] >= OBS[0][0], st[k][0] <= OBS[0][1],
@@ -103,6 +107,43 @@ class IncrementalRefiner:
         self.emitted.update(fresh)
         return len(fresh)
 
+    # pylint: disable-next=too-many-locals
+    def add_plant_cells(self, keys):
+        """Assert the displacement contract for each new (v, th) cell.
+
+        Safe to do incrementally only because the global |dx|,|dy| <= |v|*dt
+        bound already constrains the cells that have not been added.
+        """
+        fresh = [k for k in keys if k not in self.plant_emitted]
+        if not fresh:
+            return 0
+        vd = np.linspace(*VR, self.nvd + 1)
+        td = np.linspace(-math.pi, math.pi, self.nvd + 1)
+        for k in range(self.horizon):
+            _, _, v, th = self.state[k]
+            dx, dy = z3.Real(f"dx_{k}"), z3.Real(f"dy_{k}")
+            for a, b in fresh:
+                (dxl, dxh), (dyl, dyh) = displacement_bounds(
+                    vd[a], vd[a + 1], td[b], td[b + 1])
+                g = z3.And(v >= float(vd[a]), v <= float(vd[a + 1]),
+                           th >= float(td[b]), th <= float(td[b + 1]))
+                self.solver.add(z3.Implies(g, z3.And(dx >= dxl, dx <= dxh,
+                                                     dy >= dyl, dy <= dyh)))
+        self.plant_emitted.update(fresh)
+        return len(fresh)
+
+    def counterexample_plant_cells(self, model):
+        """(v, th) cells the counterexample trace occupies."""
+        out = set()
+        for k in range(self.horizon + 1):
+            v = float(model.eval(self.state[k][2], model_completion=True)
+                      .as_fraction())
+            th = float(model.eval(self.state[k][3], model_completion=True)
+                       .as_fraction())
+            out.add((cell_index(v, *VR, self.nvd),
+                     cell_index(th, -math.pi, math.pi, self.nvd)))
+        return out
+
     def counterexample_cells(self, model):
         """Cells the counterexample trace occupies."""
         out = set()
@@ -116,19 +157,24 @@ class IncrementalRefiner:
         return out
 
 
+# pylint: disable-next=too-many-locals
 def main():
     """Refine incrementally and report the outcome."""
     nx, nv, nvd = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
     horizon = int(sys.argv[4])
     max_iters = int(sys.argv[5]) if len(sys.argv) > 5 else 40
     nth = nv
-    ref = IncrementalRefiner(nx, nv, nth, nvd, horizon)
-    active = with_neighbours(seed_cells(nx, nv, nth), (nx, nx, nv, nth))
-    print(f"incremental, net {nx}x{nv}x{nth}, disp {nvd} (all), "
-          f"horizon {horizon}")
+    active, dseed = seed_cells(nx, nv, nth, nvd)
+    plant = with_neighbours(dseed, (nvd, nvd)) if len(sys.argv) > 6 \
+        and sys.argv[6].lower() == "seedplant" else None
+    ref = IncrementalRefiner(nx, nv, nth, nvd, horizon, plant)
+    active = with_neighbours(active, (nx, nx, nv, nth))
+    print(f"incremental, net {nx}x{nv}x{nth}, disp {nvd} "
+          f"({'seeded' if plant else 'all'}), horizon {horizon}")
     ref.add_cells(active)
+    ref.add_plant_cells(ref.plant_cells)
     print(f"  seeded with {len(ref.emitted)} network cells "
-          f"+ {nvd*nvd} plant contracts")
+          f"+ {len(ref.plant_emitted)} plant contracts")
 
     for it in range(max_iters):
         t0 = time.time()
@@ -139,17 +185,21 @@ def main():
             print(f"  PROVED to depth {horizon} with {len(ref.emitted)} "
                   f"network contracts of {nx*nx*nv*nth} "
                   f"({nx*nx*nv*nth/len(ref.emitted):.0f}x fewer) "
-                  f"plus {nvd*nvd} plant contracts")
+                  f"plus {len(ref.plant_emitted)} plant contracts")
             return
         if res != z3.sat:
             print(f"  iter {it}: {res} ({dt:.1f}s)")
             return
-        cells = ref.counterexample_cells(ref.solver.model())
-        new = with_neighbours(cells - ref.emitted, (nx, nx, nv, nth))
-        added = ref.add_cells(new)
-        print(f"  iter {it}: {len(ref.emitted)} cells -> SAT ({dt:.1f}s), "
-              f"+{added} new")
-        if not added:
+        model = ref.solver.model()
+        cells = ref.counterexample_cells(model)
+        added = ref.add_cells(
+            with_neighbours(cells - ref.emitted, (nx, nx, nv, nth)))
+        pcells = ref.counterexample_plant_cells(model)
+        padded = ref.add_plant_cells(
+            with_neighbours(pcells - ref.plant_emitted, (nvd, nvd)))
+        print(f"  iter {it}: {len(ref.emitted)}+{len(ref.plant_emitted)} "
+              f"cells -> SAT ({dt:.1f}s), +{added}+{padded} new")
+        if not added and not padded:
             print("  counterexample stays inside the covered cells: the GRID "
                   "is too coarse, adding cells cannot help")
             return
