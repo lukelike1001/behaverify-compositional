@@ -1,0 +1,18 @@
+MODULE main
+VAR
+  px : real;
+FUN
+  ctrl : real -> real;
+INIT px = 0.0;
+TRANS next(px) = px + ctrl(px);
+INVAR (px >= 10.0 & px <= 13.0) -> (ctrl(px) >= -1.0 & ctrl(px) <= 0.0);
+INVAR (px >= 13.0 & px <= 16.0) -> (ctrl(px) >= -1.0 & ctrl(px) <= 0.0);
+INVAR (px >= 16.0 & px <= 19.0) -> (ctrl(px) >= -1.0 & ctrl(px) <= 0.0);
+INVAR (px >= 19.0 & px <= 22.0) -> (ctrl(px) >= -1.0 & ctrl(px) <= 0.0);
+INVAR (px >= 22.0 & px <= 25.0) -> (ctrl(px) >= -1.0 & ctrl(px) <= 0.0);
+INVAR (px >= 25.0 & px <= 28.0) -> (ctrl(px) >= -1.0 & ctrl(px) <= 0.0);
+INVAR (px >= 28.0 & px <= 31.0) -> (ctrl(px) >= -1.0 & ctrl(px) <= 0.0);
+INVAR (px >= 31.0 & px <= 34.0) -> (ctrl(px) >= -1.0 & ctrl(px) <= 0.0);
+INVAR (px >= 34.0 & px <= 37.0) -> (ctrl(px) >= -1.0 & ctrl(px) <= 0.0);
+INVAR (px >= 37.0 & px <= 40.0) -> (ctrl(px) >= -1.0 & ctrl(px) <= 0.0);
+INVARSPEC (px >= 10.0 & px <= 40.0) -> (ctrl(px) >= -1.0 & ctrl(px) <= 0.0);
