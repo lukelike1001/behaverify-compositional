@@ -33,9 +33,9 @@ def edges(lo, hi, n, val):
     return float(e[i]), float(e[i + 1])
 
 
-def evaluate(expr: str, state) -> float:
+def evaluate(expr: str, state, names=VARS) -> float:
     """Evaluate an emitted SMV affine expression at a concrete state."""
-    env = dict(zip(VARS, (float(s) for s in state)))
+    env = dict(zip(names, (float(s) for s in state)))
     return float(eval(expr, {"__builtins__": {}}, env))  # noqa: S307
 
 
