@@ -522,3 +522,48 @@ address and boxes cannot.
 python3 COLLAB/experiments/nav_sound/per_step_contracts.py 30
 python3 -c "import sys;sys.argv=['x'];sys.path.insert(0,'COLLAB/experiments/nav_sound');import per_step_contracts as m;m.admission(12)"
 ```
+
+
+---
+
+# 13 — the white whale was the wrong benchmark
+
+NAV's behavior tree, in full:
+
+```
+checks {} end_checks
+sub_trees {} end_sub_trees
+tree { Act {} } end_tree
+```
+
+**One action node.** No condition nodes, no subtrees, no selectors, sequences or
+parallels. It is a single neural control loop wrapped in BehaVerify syntax.
+
+| example | composites |
+|---|---|
+| `acas_closed_loop.tree` | 6 |
+| `grid_world/counter_template.tree` | 2 |
+| **NAV** | **0** |
+
+This explains §12. Compositional verification pays for itself where a system
+**branches** — where the reachable set is a union over modes that one box cannot
+represent and an SMT encoding can. NAV branches nowhere, so a box tracks it
+about as well as anything can, and the machinery buys nothing while costing a
+solver.
+
+It also explains the shape of the whole project. ACAS closed loop (6 composites)
+is where compositional reportedly won ~6×; grid world (2 composites) is where
+the CTL/liveness result landed; NAV (0 composites) is where every architecture
+stalled at k=8–10 regardless of tool, contract form, grid, or solver. **The
+pattern tracks BT structure, not continuity.**
+
+## The experiment this implies
+
+Build a NAV variant *with* branching — a selector choosing between two
+controllers on a condition, e.g. a cautious mode near the obstacle — and compare
+compositional verification against per-step reachability on it. Per-step must
+collapse the disjunction into one box; the SMT encoding need not.
+
+If compositional wins there and loses on bare NAV, that is a clean claim about
+**when** the method is worth its cost — a better paper than either "it works" or
+"it doesn't."
