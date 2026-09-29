@@ -387,12 +387,21 @@ true one; the obstacle margin is 0.2445):
 
 | network grid | plant | gap |
 |---|---|---|
-| 8³ | disp 32 | 0.595 |
-| **32³** | disp 32 | **0.594** |
+| 8³ | disp 32 | 0.591 |
+| **32³** | disp 32 | **0.532** |
 | 8³ | **disp 128** | **0.452** |
 
-Refining the **network** 4× changes it by 0.001. Refining the **plant** changes
-it by 0.143. This project has spent its effort refining the neural side while
+Refining the **network** 4× — sixty-four times the cells — changes it by 0.059,
+about 10%. Refining the **plant** changes it by 0.139.
+
+*(An earlier version of this table read 0.595 / 0.594 / 0.452, from a bug: 
+`add_cells` emitted contracts for `u1` only, leaving `u2` bounded merely by the
+global `|u2| ≤ 1`. Fixed; the numbers above are the corrected ones. The bug
+made network refinement look completely useless rather than merely weak.)*
+
+Extrapolating honestly: at a factor of 0.90 per 4× refinement, reaching the
+0.2445 margin from 0.532 needs about 7.4 further steps — roughly a **40,000×
+finer grid**. This project has spent its effort refining the neural side while
 the binding constraint was the displacement abstraction — which is not a neural
 network at all, but `v·cos θ`, a known analytic function.
 
@@ -404,9 +413,10 @@ Once the abstract state spans more than one cell, the control it admits is the
 wide. Measured from both sides: refining 8³ → 32³ tightens the per-cell `u2`
 bound from **2.80 to 0.74** and leaves the drift **unchanged**.
 
-`cell_span.py` shows θ's abstract spread growing at exactly **0.51 cells/step =
-0.40 rad/step = 2·dt·1.0** — precisely the global `|u2| ≤ 1` bound. The per-cell
-heading contracts contribute nothing beyond it.
+`cell_span.py` showed θ's abstract spread growing at exactly **0.51 cells/step
+= 0.40 rad/step = 2·dt·1.0** — the global `|u2| ≤ 1` bound. That measurement was
+an artefact of the missing-`u2` bug above, not evidence about the contracts, and
+is withdrawn.
 
 ## 10c — the culprit is the heading control
 

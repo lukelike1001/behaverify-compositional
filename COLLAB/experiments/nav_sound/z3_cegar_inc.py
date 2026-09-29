@@ -27,7 +27,7 @@ import z3
 sys.path.insert(0, "COLLAB/experiments/nav_uclid5")
 sys.path.insert(0, "COLLAB/experiments/nav_sound")
 from gen_nav_contracts import load_net, crown_bounds, floor_to, ceil_to  # noqa: E402
-from gen_nav_affine import NET                                           # noqa: E402
+from gen_nav_affine import NET, crown_affine                             # noqa: E402
 from gen_nav_smv import displacement_bounds                              # noqa: E402
 from affine_displacement import affine_displacement                      # noqa: E402
 from z3_cegar import cell_index, cell_box, seed_cells                   # noqa: E402
@@ -73,12 +73,13 @@ class IncrementalRefiner:
 
     # pylint: disable-next=too-many-arguments,too-many-positional-arguments
     def __init__(self, nx, nv, nth, nvd, horizon, plant_cells=None,
-                 affine_plant=False):
+                 affine_plant=False, affine_net=False):
         self.nx, self.nv, self.nth = nx, nv, nth
         self.nvd, self.horizon = nvd, horizon
         self.bm = BoundedModule(load_net(NET), torch.zeros(1, 4))
         self.solver = z3.Solver()
         self.affine_plant = affine_plant
+        self.affine_net = affine_net
         self.emitted = set()          # (level, i, j, a, b)
         self.plant_emitted = set()
         self.plant_cells = (sorted(plant_cells) if plant_cells is not None
@@ -134,18 +135,36 @@ class IncrementalRefiner:
         boxes = [cell_box(k[1:], nx, nv, nth) for k in fresh]
         lo = np.array([b[0] for b in boxes], np.float32)
         hi = np.array([b[1] for b in boxes], np.float32)
-        clb, cub = crown_bounds(self.bm, lo, hi)
+        if self.affine_net:
+            l_a, lbias, u_a, ubias = crown_affine(self.bm, lo, hi)
+            clb = cub = None
+        else:
+            clb, cub = crown_bounds(self.bm, lo, hi)
+            l_a = lbias = u_a = ubias = None
         for k in range(self.horizon):
             x, y, v, th = self.state[k]
-            u1 = z3.Real(f"u1_{k}")
-            for n in range(len(fresh)):
+            for n, o, ctrl in ((n, o, z3.Real(f"u{o + 1}_{k}"))
+                               for n in range(len(fresh)) for o in (0, 1)):
                 guard = z3.And(x >= float(lo[n][0]), x <= float(hi[n][0]),
                                y >= float(lo[n][1]), y <= float(hi[n][1]),
                                v >= float(lo[n][2]), v <= float(hi[n][2]),
                                th >= float(lo[n][3]), th <= float(hi[n][3]))
-                self.solver.add(z3.Implies(guard, z3.And(
-                    u1 >= floor_to(max(float(clb[n][0]), -1.0)),
-                    u1 <= ceil_to(min(float(cub[n][0]), 1.0)))))
+                if self.affine_net:
+                    # An AFFINE contract makes the bound FOLLOW the state, so
+                    # the union over several spanned cells is not much wider
+                    # than one cell's - which is the feedback loop that defeats
+                    # interval contracts once the state spreads past a cell.
+                    terms = [x, y, v, th]
+                    lower = sum(float(l_a[n][o][i]) * terms[i]
+                                for i in range(4)) + float(lbias[n][o])
+                    upper = sum(float(u_a[n][o][i]) * terms[i]
+                                for i in range(4)) + float(ubias[n][o])
+                    self.solver.add(z3.Implies(
+                        guard, z3.And(ctrl >= lower, ctrl <= upper)))
+                else:
+                    self.solver.add(z3.Implies(guard, z3.And(
+                        ctrl >= floor_to(max(float(clb[n][o]), -1.0)),
+                        ctrl <= ceil_to(min(float(cub[n][o]), 1.0)))))
         self.emitted.update(fresh)
         return len(fresh)
 

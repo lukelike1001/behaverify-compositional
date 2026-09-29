@@ -65,7 +65,8 @@ def main():
     # where only the global |dy| <= |v|*dt bound applies, which is far weaker
     # than the per-cell one.
     aff = len(sys.argv) > 6 and sys.argv[6].lower() == "affineplant"
-    ref = IncrementalRefiner(nx, nv, nth, nvd, horizon, None, aff)
+    affn = len(sys.argv) > 7 and sys.argv[7].lower() == "affinenet"
+    ref = IncrementalRefiner(nx, nv, nth, nvd, horizon, None, aff, affn)
     ref.add_cells(expand(active, (nx, nx, nv, nth), cell_radii(nx, nv, nth)))
     ref.add_plant_cells(ref.plant_cells)
 
