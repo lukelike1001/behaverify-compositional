@@ -20,7 +20,7 @@ import torch
 sys.path.insert(0, "COLLAB/experiments/nav_uclid5")
 sys.path.insert(0, "COLLAB/experiments/nav_sound")
 from gen_nav_contracts import load_net                  # noqa: E402
-from gen_nav_affine import crown_affine, affine_expr, VARS, PREC, NET  # noqa: E402
+from gen_nav_affine import crown_affine, affine_expr, VARS, NET  # noqa: E402
 from auto_LiRPA import BoundedModule                    # noqa: E402
 
 XR, VR = (-1.0, 3.5), (-2.0, 2.0)
@@ -28,6 +28,7 @@ DT, STEPS = 0.2, 30
 
 
 def edges(lo, hi, n, val):
+    """Edges of the grid cell containing val."""
     e = np.linspace(lo, hi, n + 1)
     i = min(max(int((val - lo) / (hi - lo) * n), 0), n - 1)
     return float(e[i]), float(e[i + 1])
@@ -39,7 +40,8 @@ def evaluate(expr: str, state, names=VARS) -> float:
     return float(eval(expr, {"__builtins__": {}}, env))  # noqa: S307
 
 
-def main():
+def main():  # pylint: disable=too-many-locals
+    """Check the affine network contracts against the true closed loop."""
     nx, nv = int(sys.argv[1]), int(sys.argv[2])
     nth = int(sys.argv[3]) if len(sys.argv) > 3 else nv
     bm = BoundedModule(load_net(NET), torch.zeros(1, 4))
@@ -59,11 +61,11 @@ def main():
             if not all(b[0] - 1e-6 <= s <= b[1] + 1e-6
                        for b, s in zip(box, state)):
                 outside += 1
-            lA, lbias, uA, ubias = crown_affine(bm, lo, hi)
+            l_a, lbias, u_a, ubias = crown_affine(bm, lo, hi)
             for out in (0, 1):
-                elo = affine_expr(lA[0][out], lbias[0][out], lo[0], hi[0], True)
-                ehi = affine_expr(uA[0][out], ubias[0][out], lo[0], hi[0], False)
-                if not (evaluate(elo, state) <= u[out] <= evaluate(ehi, state)):
+                elo = affine_expr(l_a[0][out], lbias[0][out], lo[0], hi[0], True)
+                ehi = affine_expr(u_a[0][out], ubias[0][out], lo[0], hi[0], False)
+                if not evaluate(elo, state) <= u[out] <= evaluate(ehi, state):
                     viol += 1
             total += 1
             state = state + DT * np.array(

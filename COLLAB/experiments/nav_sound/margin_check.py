@@ -23,6 +23,7 @@ def dist_to_box(x, y, box=((1.0, 2.0), (1.0, 2.0))):
 
 
 def main():
+    """Report the closest approach of any true trajectory to the obstacle."""
     sess = ort.InferenceSession(NET)
     inp = sess.get_inputs()[0].name
     worst = (1e9, None)

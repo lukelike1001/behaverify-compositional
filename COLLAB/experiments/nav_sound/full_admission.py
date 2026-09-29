@@ -31,7 +31,8 @@ XR, VR = (-1.0, 3.5), (-2.0, 2.0)
 DT, STEPS = 0.2, 30
 
 
-def main():
+def main():  # pylint: disable=too-many-locals
+    """Check both affine contract families against the true closed loop."""
     nx, nv = int(sys.argv[1]), int(sys.argv[2])
     nvd = int(sys.argv[3]) if len(sys.argv) > 3 else nv
     nth = nv
@@ -50,10 +51,10 @@ def main():
                    edges(-math.pi, math.pi, nth, state[3]))
             lo = np.array([[b[0] for b in box]], np.float32)
             hi = np.array([[b[1] for b in box]], np.float32)
-            lA, lbias, uA, ubias = crown_affine(bm, lo, hi)
+            l_a, lbias, u_a, ubias = crown_affine(bm, lo, hi)
             for out in (0, 1):
-                elo = affine_expr(lA[0][out], lbias[0][out], lo[0], hi[0], True)
-                ehi = affine_expr(uA[0][out], ubias[0][out], lo[0], hi[0], False)
+                elo = affine_expr(l_a[0][out], lbias[0][out], lo[0], hi[0], True)
+                ehi = affine_expr(u_a[0][out], ubias[0][out], lo[0], hi[0], False)
                 if not evaluate(elo, state) <= u[out] <= evaluate(ehi, state):
                     net_viol += 1
 

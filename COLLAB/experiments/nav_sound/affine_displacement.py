@@ -59,7 +59,8 @@ def _interval_width(vlo, vhi, tlo, thi, dt=0.2, use_sin=False, samples=400):
     return float(vals.max() - vals.min()) + 2 * pad
 
 
-def main():
+def main():  # pylint: disable=too-many-locals
+    """Report affine-vs-interval displacement widths and spot-check soundness."""
     print(f"{'nvd':>5} {'contracts':>10} {'interval w':>11} {'affine w':>9} {'gain':>6}")
     for nvd in (16, 32, 64, 128):
         vd = np.linspace(-2, 2, nvd + 1)
@@ -75,11 +76,14 @@ def main():
     rng = np.random.default_rng(0)
     worst = -math.inf
     for _ in range(4000):
-        vlo = rng.uniform(-2, 1.8); vhi = vlo + rng.uniform(0.01, 0.2)
-        tlo = rng.uniform(-math.pi, math.pi - 0.3); thi = tlo + rng.uniform(0.01, 0.3)
+        vlo = rng.uniform(-2, 1.8)
+        vhi = vlo + rng.uniform(0.01, 0.2)
+        tlo = rng.uniform(-math.pi, math.pi - 0.3)
+        thi = tlo + rng.uniform(0.01, 0.3)
         for use_sin in (False, True):
             av, ath, c, rad = affine_displacement(vlo, vhi, tlo, thi, use_sin=use_sin)
-            vs = rng.uniform(vlo, vhi, 30); ths = rng.uniform(tlo, thi, 30)
+            vs = rng.uniform(vlo, vhi, 30)
+            ths = rng.uniform(tlo, thi, 30)
             true = vs * (np.sin(ths) if use_sin else np.cos(ths)) * 0.2
             approx = av * vs + ath * ths + c
             worst = max(worst, float(np.max(np.abs(true - approx) - rad)))
