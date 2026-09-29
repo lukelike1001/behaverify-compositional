@@ -158,6 +158,39 @@ class IncrementalRefiner:
 
 
 # pylint: disable-next=too-many-locals
+
+def _classify(model, ref, horizon):
+    """Is the counterexample real, or an artefact of the over-approximation?
+
+    Simulates the TRUE closed loop from the counterexample's own initial state.
+    If the true run also hits the obstacle the counterexample is genuine and no
+    refinement will remove it; if it stays clear, the counterexample is spurious
+    and the gap is over-approximation error.
+    """
+    import onnxruntime as ort
+    x0 = float(model.eval(ref.state[0][0], model_completion=True).as_fraction())
+    y0 = float(model.eval(ref.state[0][1], model_completion=True).as_fraction())
+    sess = ort.InferenceSession(str(NET))
+    inp = sess.get_inputs()[0].name
+    st = np.array([x0, y0, 0.0, 0.0], np.float32)
+    worst, hit = 1e9, False
+    for _ in range(horizon + 1):
+        dxm = max(1.0 - st[0], 0.0, st[0] - 2.0)
+        dym = max(1.0 - st[1], 0.0, st[1] - 2.0)
+        d = float(np.hypot(dxm, dym))
+        worst = min(worst, d)
+        hit = hit or d == 0.0
+        u = sess.run(None, {inp: st.reshape(1, 4)})[0].ravel()
+        st = st + DT * np.array([st[2] * np.cos(st[3]), st[2] * np.sin(st[3]),
+                                 u[0], u[1]], np.float32)
+    print(f"  true run from the counterexample's start ({x0:.4f}, {y0:.4f}): "
+          f"closest approach {worst:.4f}")
+    print("  => COUNTEREXAMPLE IS REAL" if hit else
+          "  => counterexample is SPURIOUS (true run clears the obstacle); "
+          "the gap is over-approximation error, not a real violation")
+
+
+# pylint: disable-next=too-many-locals
 def main():
     """Refine incrementally and report the outcome."""
     nx, nv, nvd = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
@@ -202,6 +235,20 @@ def main():
         if not added and not padded:
             print("  counterexample stays inside the covered cells: the GRID "
                   "is too coarse, adding cells cannot help")
+            ranges = []
+            for i, name in enumerate(("x", "y", "v", "th")):
+                vals = [float(model.eval(ref.state[k][i],
+                                         model_completion=True).as_fraction())
+                        for k in range(horizon + 1)]
+                lim = XR if i < 2 else (VR if i == 2 else (-math.pi, math.pi))
+                flag = " ESCAPES MODELLED BOX" if (
+                    min(vals) < lim[0] - 1e-9 or max(vals) > lim[1] + 1e-9
+                ) else ""
+                ranges.append(f"    {name}: [{min(vals):.3f}, {max(vals):.3f}] "
+                              f"box [{lim[0]:.3f}, {lim[1]:.3f}]{flag}")
+            print("  counterexample state ranges:")
+            print("\n".join(ranges))
+            _classify(model, ref, horizon)
             return
     print(f"  stopped after {max_iters} iterations at {len(ref.emitted)} cells")
 
