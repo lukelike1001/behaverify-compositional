@@ -56,14 +56,17 @@ def cell_box(key, nx, nv, nth):
             [xs[i + 1], xs[j + 1], vs[a + 1], ts[b + 1]])
 
 
-def seed_cells(nx, nv, nth):
-    """Cells the true trajectories visit: a cheap, useful starting set."""
+def seed_cells(nx, nv, nth, nvd=None):
+    """Cells the true trajectories visit: a cheap, useful starting set.
+
+    Returns the network cells, and the displacement cells when nvd is given.
+    """
     import itertools
     import onnxruntime as ort
     sess = ort.InferenceSession(str(NET))
     inp = sess.get_inputs()[0].name
-    seen = set()
-    for x0, y0 in itertools.product(np.linspace(2.9, 3.1, 5), repeat=2):
+    seen, dseen = set(), set()
+    for x0, y0 in itertools.product(np.linspace(2.9, 3.1, 15), repeat=2):
         state = np.array([x0, y0, 0.0, 0.0], np.float32)
         for _ in range(30):
             u = sess.run(None, {inp: state.reshape(1, 4)})[0].ravel()
@@ -71,14 +74,44 @@ def seed_cells(nx, nv, nth):
                       cell_index(state[1], *XR, nx),
                       cell_index(state[2], *VR, nv),
                       cell_index(state[3], -math.pi, math.pi, nth)))
+            if nvd:
+                dseen.add((cell_index(state[2], *VR, nvd),
+                           cell_index(state[3], -math.pi, math.pi, nvd)))
             state = state + DT * np.array(
                 [state[2] * np.cos(state[3]), state[2] * np.sin(state[3]),
                  u[0], u[1]], np.float32)
-    return seen
+    return (seen, dseen) if nvd else seen
 
 
-def build(active, kind, bm, nx, nv, nth, nvd, horizon):
-    """A BMC query carrying contracts for the active cells only."""
+
+def with_neighbours(keys, limits):
+    """Each cell plus its face neighbours, clipped to the grid.
+
+    An uncovered cell is UNCONSTRAINED, so the solver will route the next
+    counterexample straight through one if it can; adding only the cells a
+    counterexample touched therefore converges one thin path at a time.
+    Widening by one cell per axis fills the tube far faster, and since adding
+    contracts only tightens the abstraction it cannot cost soundness.
+    """
+    out = set()
+    for key in keys:
+        out.add(key)
+        for axis, limit in enumerate(limits):
+            for step in (-1, 1):
+                nb = list(key)
+                nb[axis] += step
+                if 0 <= nb[axis] < limit:
+                    out.add(tuple(nb))
+    return out
+
+
+def build(active, dactive, kind, bm, nx, nv, nth, nvd, horizon):
+    """A BMC query carrying contracts for the active cells only.
+
+    Both families are restricted: the network cells in ``active`` and the
+    displacement cells in ``dactive``.  Refining only the network leaves
+    nvd^2 displacement contracts dominating the query.
+    """
     keys = sorted(active)
     boxes = [cell_box(k, nx, nv, nth) for k in keys]
     lo = np.array([b[0] for b in boxes], np.float32)
@@ -116,14 +149,13 @@ def build(active, kind, bm, nx, nv, nth, nvd, horizon):
                 s.add(z3.Implies(guard, z3.And(
                     u1 >= floor_to(max(float(clb[n][0]), -1.0)),
                     u1 <= ceil_to(min(float(cub[n][0]), 1.0)))))
-        for a in range(nvd):
-            for b in range(nvd):
-                (dxl, dxh), (dyl, dyh) = displacement_bounds(
-                    vd[a], vd[a + 1], td[b], td[b + 1])
-                g = z3.And(v >= float(vd[a]), v <= float(vd[a + 1]),
-                           th >= float(td[b]), th <= float(td[b + 1]))
-                s.add(z3.Implies(g, z3.And(dx >= dxl, dx <= dxh,
-                                           dy >= dyl, dy <= dyh)))
+        for a, b in sorted(dactive):
+            (dxl, dxh), (dyl, dyh) = displacement_bounds(
+                vd[a], vd[a + 1], td[b], td[b + 1])
+            g = z3.And(v >= float(vd[a]), v <= float(vd[a + 1]),
+                       th >= float(td[b]), th <= float(td[b + 1]))
+            s.add(z3.Implies(g, z3.And(dx >= dxl, dx <= dxh,
+                                       dy >= dyl, dy <= dyh)))
         s.add(st[k + 1][0] == x + dx, st[k + 1][1] == y + dy,
               st[k + 1][2] == v + DT * u1, st[k + 1][3] == th + DT * u2)
 
@@ -140,25 +172,32 @@ def main():  # pylint: disable=too-many-locals
     max_iters = int(sys.argv[6]) if len(sys.argv) > 6 else 25
     nth = nv
     bm = BoundedModule(load_net(NET), torch.zeros(1, 4))
-    active = seed_cells(nx, nv, nth)
+    active, dactive = seed_cells(nx, nv, nth, nvd)
+    active = with_neighbours(active, (nx, nx, nv, nth))
+    dactive = with_neighbours(dactive, (nvd, nvd))
     print(f"{kind} net {nx}x{nv}x{nth}, disp {nvd}, horizon {horizon}")
-    print(f"  full grid would be {nx*nx*nv*nth} cells; seeded with {len(active)}")
+    print(f"  full grid would be {nx*nx*nv*nth} net + {nvd*nvd} disp cells; "
+          f"seeded with {len(active)} + {len(dactive)}")
 
     for it in range(max_iters):
         t0 = time.time()
-        solver, st = build(active, kind, bm, nx, nv, nth, nvd, horizon)
+        solver, st = build(active, dactive, kind, bm,
+                           nx, nv, nth, nvd, horizon)
         res = solver.check()
         dt = time.time() - t0
         if res == z3.unsat:
-            print(f"  iter {it}: {len(active)} cells -> UNSAT ({dt:.1f}s)")
-            print(f"  PROVED to depth {horizon} with {len(active)} contracts "
-                  f"({nx*nx*nv*nth / len(active):.0f}x fewer than the full grid)")
+            total = len(active) + len(dactive)
+            full = nx * nx * nv * nth + nvd * nvd
+            print(f"  iter {it}: {len(active)}+{len(dactive)} cells -> "
+                  f"UNSAT ({dt:.1f}s)")
+            print(f"  PROVED to depth {horizon} with {total} contracts "
+                  f"({full / total:.0f}x fewer than the full grid)")
             return
         if res != z3.sat:
             print(f"  iter {it}: {res} ({dt:.1f}s)")
             return
         model = solver.model()
-        added = set()
+        added, dadded = set(), set()
         for k in range(horizon + 1):
             vals = [float(model.eval(st[k][i], model_completion=True)
                           .as_fraction()) for i in range(4)]
@@ -167,14 +206,21 @@ def main():  # pylint: disable=too-many-locals
                    cell_index(vals[3], -math.pi, math.pi, nth))
             if key not in active:
                 added.add(key)
-        print(f"  iter {it}: {len(active)} cells -> SAT ({dt:.1f}s), "
-              f"{len(added)} new cells on the counterexample")
-        if not added:
+            dkey = (cell_index(vals[2], *VR, nvd),
+                    cell_index(vals[3], -math.pi, math.pi, nvd))
+            if dkey not in dactive:
+                dadded.add(dkey)
+        print(f"  iter {it}: {len(active)}+{len(dactive)} cells -> SAT "
+              f"({dt:.1f}s), {len(added)}+{len(dadded)} new on the "
+              "counterexample")
+        if not added and not dadded:
             print("  counterexample stays inside the covered cells: the GRID "
                   "is too coarse, adding cells cannot help")
             return
-        active |= added
-    print(f"  stopped after {max_iters} iterations at {len(active)} cells")
+        active |= with_neighbours(added, (nx, nx, nv, nth))
+        dactive |= with_neighbours(dadded, (nvd, nvd))
+    print(f"  stopped after {max_iters} iterations at "
+          f"{len(active)}+{len(dactive)} cells")
 
 
 if __name__ == "__main__":

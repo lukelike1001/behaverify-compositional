@@ -229,3 +229,87 @@ against the 4–85× needed.
 Precision can come only from smaller cells; cells cost `nx²·nv·nth`; the
 solver ceiling is 6,000–8,000. The window is empty, and now provably so rather
 than just observedly so.
+
+---
+
+# The night of 09/29: the wall was self-inflicted
+
+Everything above measures one quantity — how deep the abstraction stays faithful
+before a spurious counterexample — against one budget, nuXmv's 6–8k `INVAR`
+ceiling. Both halves of that framing turned out to be wrong.
+
+## 5 — nuXmv is the wrong tool, twice over
+
+Affine contracts (keeping CROWN's linear relaxation instead of concretizing it)
+are 2.5–8× tighter at identical contract count. nuXmv **cannot decide them at
+all**: timeout at 1,200 s on 514 contracts and 2,700 s on 5,120, under
+`msat_check_invar_bmc`, `check_invar_ic3` and `..._cegar_implabs` alike, and at
+every BMC depth from 1 to 6. The contracts are numerically clean (coefficients
+in [−1.099, 1.155]).
+
+A direct Z3 encoding of **the same contracts** decides it in **14.6 s**.
+
+The encoding is verified faithful rather than assumed: on interval 8×8+d32 it
+returns `unsat` at k=7 and `sat` at k=8, exactly matching nuXmv's `is false`
+with a 9-state trace — in 9.3 s against 65 s.
+
+So nuXmv's `INVAR` ceiling *and* its inability to handle dense linear contracts
+are properties of one tool, not of the approach.
+
+## 6 — NAV needs no inductive invariant
+
+NAV carries `k : 0..30` and freezes at the horizon, so every reachable state
+occurs within 30 steps. **BMC unrolled to depth ≥ 30 is a complete proof**, not
+a bounded approximation. The invariant-synthesis wall (claims #52, #53) applies
+to proving by *induction*; it does not apply to unrolling, and unrolling is
+available because the horizon is short and finite.
+
+## 7 — the contract-count wall was self-inflicted
+
+Every model emitted a contract for **every cell** of the 4-D box. The system
+visits a thin tube: at grid 16/16/16 the true trajectories touch **74 of
+65,536** cells. Interval propagation cannot find that tube soundly — it swells
+to cover the whole grid within ten steps — so `z3_cegar.py` lets the *solver*
+name the cells, adding only those a counterexample actually occupies.
+
+Cells outside the active set are unconstrained, so the abstraction is **coarser**
+than the fully-emitted one, never finer. That direction is exactly why `UNSAT`
+at any iteration is a real proof.
+
+| configuration | grid cells | contracts used | result |
+|---|---|---|---|
+| net 8×8×8, disp 128, k=8 | 4,096 | 4,096 (full) | `unsat`, 57 s |
+| net 8×8×8, disp 128, k=8 | 4,096 | **34** | `unsat`, 108 s |
+| net 32×32×32, disp 128, k=8 | 1,048,576 | **165** | `unsat`, **137 s** |
+
+That last row is **128× past nuXmv's entire `INVAR` capacity**, proved with 165
+contracts — 6,355× fewer than the grid it refines.
+
+The loop also diagnoses its own limit. At disp 32 it halts with *"counterexample
+stays inside the covered cells: the grid is too coarse"* — correctly naming the
+**displacement** contracts, not the network contracts, as binding. Raising disp
+32 → 128 flipped `sat` to `unsat`.
+
+## 8 — and affine loses after all
+
+Head-to-head depth scan, net 4×4 + disp 16, same solver:
+
+| k | interval | affine |
+|---|---|---|
+| 5 | `unsat` 0.1 s | `unsat` 88.7 s |
+| 6 | `unsat` 0.1 s | `unsat` 42.4 s |
+| 7 | `unsat` 0.2 s | timeout (>240 s) |
+| 8 | `sat` 0.2 s | — |
+
+Affine buys tightness that refinement now supplies far more cheaply. Partial
+affine is no help either: dropping from 4 coupled axes to 2 loses 70% of the
+tightness, because CROWN's strength is in the joint linear form.
+
+## Reproduce
+
+```bash
+python3 COLLAB/experiments/nav_sound/z3_bmc.py 8 8 32 interval 8      # faithfulness
+python3 COLLAB/experiments/nav_sound/z3_cegar.py 32 32 128 interval 8 20
+python3 COLLAB/experiments/nav_sound/reachable_cells.py
+python3 COLLAB/experiments/nav_sound/theta_sensitivity.py
+```
