@@ -70,7 +70,13 @@ def main():
 
     lo_t, hi_t = true_spread(horizon)
     print(f"net {nx}x{nv}x{nth}, disp {nvd}, horizon {horizon}")
-    print(f"{'k':>3} {'abstract y':>20} {'true y':>18} {'excess':>8}")
+    # The quantity that decides safety is the ONE-SIDED gap between the
+    # abstraction's lower bound and the true one, not the interval width: an
+    # interval that is merely shifted down still enters the obstacle.
+    axis = int(sys.argv[5]) if len(sys.argv) > 5 else 1
+    name = ("x", "y", "v", "th")[axis]
+    print(f"{'k':>3} {'abstract ' + name:>20} {'true ' + name:>18} "
+          f"{'lo gap':>8} {'excess w':>9}")
     for k in range(horizon + 1):
         bounds = []
         for want_max in (False, True):
@@ -78,18 +84,19 @@ def main():
             for c in ref.solver.assertions():
                 opt.add(c)
             if want_max:
-                opt.maximize(ref.state[k][1])
+                opt.maximize(ref.state[k][axis])
             else:
-                opt.minimize(ref.state[k][1])
+                opt.minimize(ref.state[k][axis])
             if opt.check() != z3.sat:
                 bounds.append(float("nan"))
                 continue
             bounds.append(float(opt.model().eval(
-                ref.state[k][1], model_completion=True).as_fraction()))
-        width = bounds[1] - bounds[0]
-        tw = float(hi_t[k][1] - lo_t[k][1])
+                ref.state[k][axis], model_completion=True).as_fraction()))
+        lo_gap = float(lo_t[k][axis]) - bounds[0]
+        excess = (bounds[1] - bounds[0]) - float(hi_t[k][axis] - lo_t[k][axis])
         print(f"{k:>3} [{bounds[0]:>8.3f},{bounds[1]:>8.3f}] "
-              f"[{lo_t[k][1]:>7.3f},{hi_t[k][1]:>7.3f}] {width - tw:>8.3f}")
+              f"[{lo_t[k][axis]:>7.3f},{hi_t[k][axis]:>7.3f}] "
+              f"{lo_gap:>8.3f} {excess:>9.3f}")
 
 
 if __name__ == "__main__":
