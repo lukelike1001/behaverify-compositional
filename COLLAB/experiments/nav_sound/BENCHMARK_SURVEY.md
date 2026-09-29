@@ -76,3 +76,42 @@ Those are single-controller closed loops by construction: one network, one loop,
 no branching. They are all NAV-shaped, and per-step reachability would beat
 compositional verification on every one of them, for the reason established in
 §12–13. More of them would add cases, not evidence.
+
+
+---
+
+# Second correction: `real.tree` IS grid world, already solved
+
+Luke's instinct ("oddly familiar to proto-grid world") was right, and stronger
+than "similar."
+
+| | `real.tree` | 2026-08-31 liveness report |
+|---|---|---|
+| grid | `min_val 0, max_val 6` → 7×7 | 7×7 |
+| obstacles | `number_of_obstacles := 18`, `max_obstacle_size := 0` | 18, size 0 |
+| network | `1000__6_18_0__0100_1.onnx` | `1000__6_18_0__0200_1.onnx` |
+
+The filename decodes as *grid 6, 18 obstacles, size 0* — the same family, the
+same domain. A structural diff against `grid_world_big/template_fake_network_SCALE.tree`
+shows the same action enum, the same `obstacles`/`obstacle_sizes` arrays, the
+same `destination = drone position` initialisation, and the same action names
+(`new_destination`, `next_action`).
+
+`real.tree` differs only by declaring positions `VAR REAL` instead of
+`VAR [min_val, max_val]`, inverting the selector/sequence nesting, and adding
+`read_position` / `cell_changed` / `send_action` leaves.
+
+**And the 2026-08-31 report already proves `INVARSPEC = true` AND
+`CTLSPEC = true` on it, in 0.33 s**, via Floyd-style progress contracts.
+
+So pivoting to `real.tree` would re-derive an existing result with a type
+annotation changed. Claims #67 and #68 are superseded by #69; the
+recommendation is fully withdrawn.
+
+## Terminology note
+
+I described the reachable set as a "lattice." That is sloppy and actively
+confusing in this field: in abstract interpretation a *lattice* is the
+order-theoretic structure of an abstract domain (with meets and joins), which is
+a different object entirely. The correct phrase is **"the reachable set is a
+finite set of integer grid points"** or simply **"the state space is discrete."**
