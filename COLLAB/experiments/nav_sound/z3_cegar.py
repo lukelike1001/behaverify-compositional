@@ -1,0 +1,181 @@
+"""
+Demand-driven contract refinement for NAV, in Z3.
+
+Every model so far emits a contract for EVERY cell of the 4-D box, but the
+system only ever visits a thin tube: at grid 16/16/16 the true trajectories
+touch 74 of 65,536 cells.  Interval propagation cannot find that tube soundly
+(it swells to cover everything within ten steps), so instead we let the SOLVER
+tell us which cells matter.
+
+  1. Emit contracts for an ACTIVE set of cells only.  Cells outside it are
+     unconstrained apart from the global tanh bound, so the abstraction is
+     COARSER than the fully-emitted one, never finer.  That direction is what
+     makes this sound: UNSAT at any iteration is a real proof.
+  2. Check.  UNSAT -> proved, stop.
+  3. SAT -> read the counterexample, find the cells its states occupy, and add
+     any that were not active.  If they were ALL active, the counterexample is
+     genuine against these contracts and the GRID is too coarse, so refining
+     the cell set cannot help and the loop reports that instead of spinning.
+
+Usage: python3 .../z3_cegar.py <nx> <nv> <nvd> <kind> <K> [max_iters]
+"""
+import math
+import sys
+import time
+import warnings
+
+warnings.filterwarnings("ignore")
+import numpy as np
+import torch
+import z3
+
+sys.path.insert(0, "COLLAB/experiments/nav_uclid5")
+sys.path.insert(0, "COLLAB/experiments/nav_sound")
+from gen_nav_contracts import load_net, crown_bounds, floor_to, ceil_to  # noqa: E402
+from gen_nav_affine import crown_affine, NET                             # noqa: E402
+from gen_nav_smv import displacement_bounds                              # noqa: E402
+from auto_LiRPA import BoundedModule                                     # noqa: E402
+
+DT = 0.2
+XR, VR = (-1.0, 3.5), (-2.0, 2.0)
+OBS = ((1.0, 2.0), (1.0, 2.0))
+
+
+def cell_index(val, lo, hi, n):
+    """Grid index containing val, clamped to the grid."""
+    return min(max(int((val - lo) / (hi - lo) * n), 0), n - 1)
+
+
+def cell_box(key, nx, nv, nth):
+    """(lo, hi) corners of the cell named by a 4-tuple of indices."""
+    i, j, a, b = key
+    xs = np.linspace(*XR, nx + 1)
+    vs = np.linspace(*VR, nv + 1)
+    ts = np.linspace(-math.pi, math.pi, nth + 1)
+    return ([xs[i], xs[j], vs[a], ts[b]],
+            [xs[i + 1], xs[j + 1], vs[a + 1], ts[b + 1]])
+
+
+def seed_cells(nx, nv, nth):
+    """Cells the true trajectories visit: a cheap, useful starting set."""
+    import itertools
+    import onnxruntime as ort
+    sess = ort.InferenceSession(str(NET))
+    inp = sess.get_inputs()[0].name
+    seen = set()
+    for x0, y0 in itertools.product(np.linspace(2.9, 3.1, 5), repeat=2):
+        state = np.array([x0, y0, 0.0, 0.0], np.float32)
+        for _ in range(30):
+            u = sess.run(None, {inp: state.reshape(1, 4)})[0].ravel()
+            seen.add((cell_index(state[0], *XR, nx),
+                      cell_index(state[1], *XR, nx),
+                      cell_index(state[2], *VR, nv),
+                      cell_index(state[3], -math.pi, math.pi, nth)))
+            state = state + DT * np.array(
+                [state[2] * np.cos(state[3]), state[2] * np.sin(state[3]),
+                 u[0], u[1]], np.float32)
+    return seen
+
+
+def build(active, kind, bm, nx, nv, nth, nvd, horizon):
+    """A BMC query carrying contracts for the active cells only."""
+    keys = sorted(active)
+    boxes = [cell_box(k, nx, nv, nth) for k in keys]
+    lo = np.array([b[0] for b in boxes], np.float32)
+    hi = np.array([b[1] for b in boxes], np.float32)
+    if kind == "affine":
+        l_a, lbias, u_a, ubias = crown_affine(bm, lo, hi)
+    else:
+        clb, cub = crown_bounds(bm, lo, hi)
+
+    s = z3.Solver()
+    st = [[z3.Real(f"{n}_{k}") for n in ("x", "y", "v", "th")]
+          for k in range(horizon + 1)]
+    s.add(st[0][0] >= 2.9, st[0][0] <= 3.1, st[0][1] >= 2.9, st[0][1] <= 3.1,
+          st[0][2] == 0.0, st[0][3] == 0.0)
+    vd = np.linspace(*VR, nvd + 1)
+    td = np.linspace(-math.pi, math.pi, nvd + 1)
+
+    for k in range(horizon):
+        x, y, v, th = st[k]
+        u1, u2, dx, dy = (z3.Real(f"{n}_{k}") for n in ("u1", "u2", "dx", "dy"))
+        s.add(u1 >= -1, u1 <= 1, u2 >= -1, u2 <= 1)
+        for n in range(len(keys)):
+            guard = z3.And(x >= float(lo[n][0]), x <= float(hi[n][0]),
+                           y >= float(lo[n][1]), y <= float(hi[n][1]),
+                           v >= float(lo[n][2]), v <= float(hi[n][2]),
+                           th >= float(lo[n][3]), th <= float(hi[n][3]))
+            if kind == "affine":
+                terms = [x, y, v, th]
+                low = sum(float(l_a[n][0][i]) * terms[i] for i in range(4)) \
+                    + float(lbias[n][0])
+                high = sum(float(u_a[n][0][i]) * terms[i] for i in range(4)) \
+                    + float(ubias[n][0])
+                s.add(z3.Implies(guard, z3.And(u1 >= low, u1 <= high)))
+            else:
+                s.add(z3.Implies(guard, z3.And(
+                    u1 >= floor_to(max(float(clb[n][0]), -1.0)),
+                    u1 <= ceil_to(min(float(cub[n][0]), 1.0)))))
+        for a in range(nvd):
+            for b in range(nvd):
+                (dxl, dxh), (dyl, dyh) = displacement_bounds(
+                    vd[a], vd[a + 1], td[b], td[b + 1])
+                g = z3.And(v >= float(vd[a]), v <= float(vd[a + 1]),
+                           th >= float(td[b]), th <= float(td[b + 1]))
+                s.add(z3.Implies(g, z3.And(dx >= dxl, dx <= dxh,
+                                           dy >= dyl, dy <= dyh)))
+        s.add(st[k + 1][0] == x + dx, st[k + 1][1] == y + dy,
+              st[k + 1][2] == v + DT * u1, st[k + 1][3] == th + DT * u2)
+
+    s.add(z3.Or([z3.And(st[k][0] >= OBS[0][0], st[k][0] <= OBS[0][1],
+                        st[k][1] >= OBS[1][0], st[k][1] <= OBS[1][1])
+                 for k in range(horizon + 1)]))
+    return s, st
+
+
+def main():  # pylint: disable=too-many-locals
+    """Run the refinement loop and report where it stops and why."""
+    nx, nv, nvd = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
+    kind, horizon = sys.argv[4], int(sys.argv[5])
+    max_iters = int(sys.argv[6]) if len(sys.argv) > 6 else 25
+    nth = nv
+    bm = BoundedModule(load_net(NET), torch.zeros(1, 4))
+    active = seed_cells(nx, nv, nth)
+    print(f"{kind} net {nx}x{nv}x{nth}, disp {nvd}, horizon {horizon}")
+    print(f"  full grid would be {nx*nx*nv*nth} cells; seeded with {len(active)}")
+
+    for it in range(max_iters):
+        t0 = time.time()
+        solver, st = build(active, kind, bm, nx, nv, nth, nvd, horizon)
+        res = solver.check()
+        dt = time.time() - t0
+        if res == z3.unsat:
+            print(f"  iter {it}: {len(active)} cells -> UNSAT ({dt:.1f}s)")
+            print(f"  PROVED to depth {horizon} with {len(active)} contracts "
+                  f"({nx*nx*nv*nth / len(active):.0f}x fewer than the full grid)")
+            return
+        if res != z3.sat:
+            print(f"  iter {it}: {res} ({dt:.1f}s)")
+            return
+        model = solver.model()
+        added = set()
+        for k in range(horizon + 1):
+            vals = [float(model.eval(st[k][i], model_completion=True)
+                          .as_fraction()) for i in range(4)]
+            key = (cell_index(vals[0], *XR, nx), cell_index(vals[1], *XR, nx),
+                   cell_index(vals[2], *VR, nv),
+                   cell_index(vals[3], -math.pi, math.pi, nth))
+            if key not in active:
+                added.add(key)
+        print(f"  iter {it}: {len(active)} cells -> SAT ({dt:.1f}s), "
+              f"{len(added)} new cells on the counterexample")
+        if not added:
+            print("  counterexample stays inside the covered cells: the GRID "
+                  "is too coarse, adding cells cannot help")
+            return
+        active |= added
+    print(f"  stopped after {max_iters} iterations at {len(active)} cells")
+
+
+if __name__ == "__main__":
+    main()
