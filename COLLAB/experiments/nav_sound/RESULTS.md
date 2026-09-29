@@ -482,3 +482,43 @@ decides in 14.6 s and the few thousand contracts NAV needs.
 | proof obligation | BMC to the horizon is **complete**; no inductive invariant needed |
 | why it stops | state spread exceeds a cell → admitted control is the union of spanned cells' contracts → refinement gains ~10% per 4× (≈40,000× finer grid needed) |
 | what would fix it | contracts whose bound follows the state (affine) — correct in principle, ~100× too slow |
+
+
+---
+
+# 12 — the baseline beats us
+
+The feedback-loop diagnosis suggests its own cure: if the trouble is that the
+admitted control is the union over *spanned cells*, and those cells over-cover
+the reachable set, then fit **one contract per step** to the reachable set and
+drop the grid entirely. One CROWN call per step, a box propagated forward, no
+SMT solver.
+
+| | compositional grid | **per-step reachability** |
+|---|---|---|
+| horizon before spurious hit | k=8 | **k=10** |
+| contracts | 2,527 | **10** |
+| machinery | Z3 + refinement loop | **none** |
+| runtime | 8.5 s + refinement | **seconds** |
+
+At k=8, per-step gives `y ∈ [2.285, 2.755]`; the grid gives `y ∈ [1.867,
+2.318]`; the truth is `[2.459, 2.583]`. Per-step is far tighter, because grid
+cells over-cover — a cell that only partly intersects the reachable set
+contributes its whole contract.
+
+Soundness verified: 6,292 variable-checks across 121 true trajectories, zero
+escapes from the reachable boxes.
+
+**This is the comparison the project never made.** Per-step interval
+reachability is a well-known technique, not a contribution — it is the
+*baseline* the compositional architecture ought to beat, and on NAV it does not,
+on any axis. What finally stops per-step is the **wrapping effect** (`u1` width
+0.24 → 0.81 → 1.80 → 2.54 over k=7…10), which zonotopes and Taylor models
+address and boxes cannot.
+
+## Reproduce
+
+```bash
+python3 COLLAB/experiments/nav_sound/per_step_contracts.py 30
+python3 -c "import sys;sys.argv=['x'];sys.path.insert(0,'COLLAB/experiments/nav_sound');import per_step_contracts as m;m.admission(12)"
+```
