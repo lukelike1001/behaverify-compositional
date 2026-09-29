@@ -53,3 +53,8 @@ build/
 REPRODUCIBILITY/**/reports/**/*.pdf
 REPRODUCIBILITY/**/reports/**/ARCH*.png
 REPRODUCIBILITY/2025_NEUS/serbinowska25a.pdf
+
+# UCLID5 toolchain: source clone + Z3 + prebuilt, vendored like alpha-beta-CROWN.
+# Rebuild with: git clone uclid-org/uclid, source get-z3-linux.sh, sbt universal:packageBin
+REPRODUCIBILITY/2026_TBA/uclid5/
+REPRODUCIBILITY/2026_TBA/uclid-0.9.5/
