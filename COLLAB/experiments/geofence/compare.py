@@ -30,9 +30,9 @@ import numpy as np
 import torch
 import z3
 
-from train_controller import Controller
 from auto_LiRPA import BoundedModule, BoundedTensor
 from auto_LiRPA.perturbations import PerturbationLpNorm
+from train_controller import Controller
 
 from nsbt import BRAKE, DT, FENCE, HARD_LIMIT, NET
 
@@ -55,13 +55,17 @@ V_RANGE = (-1.5, 1.5)          # the box the contracts are built over
 
 
 # pylint: disable-next=too-many-locals
-def crown_cells(grid, model=None, v_range=V_RANGE):
+def crown_cells(grid, model=None, v_range=V_RANGE, x_range=None):
     """CROWN bounds on the network's acceleration, per cell of an (x,v) grid.
 
-    ``v_range`` must cover every velocity the ABSTRACTION can reach, not just
-    the true system: outside the grid no contract fires, the control is free
-    in [-1, 1], and the abstract state runs away. That hole is what made the
-    60-step proof fail, and it is a coverage bug rather than a horizon limit.
+    ``v_range`` and ``x_range`` must cover every state the ABSTRACTION can
+    reach, not just the true system: outside the grid no contract fires, the
+    control is free in [-1, 1], and the abstract state runs away. That hole is
+    what made the 60-step proof fail - its witnesses sat at v = 2.55 and
+    x = -3.20, outside a grid built over v in [-1.5, 1.5] and x in [-2, 1] -
+    so it is a coverage bug rather than a horizon limit. The region the grid
+    covers is part of what the proof asserts and belongs in any statement of
+    the result.
     """
     if model is None:
         model = Controller()
@@ -69,7 +73,7 @@ def crown_cells(grid, model=None, v_range=V_RANGE):
             pathlib.Path(NET).with_suffix(".pt"), weights_only=True))
         model.eval()
     bounded = BoundedModule(model, torch.zeros(1, 2))
-    xs = np.linspace(X0_LO, FENCE, grid + 1)
+    xs = np.linspace(*(x_range or (X0_LO, FENCE)), grid + 1)
     vs = np.linspace(*v_range, grid + 1)
     cells = []
     for i in range(grid):
