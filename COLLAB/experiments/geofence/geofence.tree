@@ -1,0 +1,93 @@
+#{
+    The geofence NSBT as a BehaVerify tree.
+
+    selector
+      |-- sequence
+      |     |-- OutsideFence?   x >= 1.0
+      |     +-- Brake           accel := -1.0
+      +-- Cruise                accel := (free; constrained by CROWN contracts)
+
+    The control is declared as a FREE REAL variable rather than a NEURAL
+    variable, because check_grammar.py forbids non-INT inputs to NEURAL nodes.
+    Contracts discharged by alpha-beta-CROWN are injected afterwards as INVARs,
+    which is the abstract-control architecture in
+    REPRODUCIBILITY/2026_TBA/src/dsl_with_abstract_control_to_nuxmv.py.
+}#
+
+configuration {
+    use_reals
+}
+enumerations {}
+constants {}
+variables {
+    variable { env x VAR REAL assign { result { 0 } } }
+    variable { env v VAR REAL assign { result { 0 } } }
+    variable { bl accel VAR REAL assign { result { 0 } } }
+}
+environment_update {
+    variable_statement {
+        x
+        assign { result { (add, x, (mult, 0.1, v)) } }
+    }
+    variable_statement {
+        v
+        assign { result { (add, v, (mult, 0.1, accel)) } }
+    }
+}
+checks {}
+environment_checks {
+    environment_check {
+        OutsideFence
+        arguments {}
+        read_variables {}
+        condition { (gte, x, 1.0) }
+    }
+}
+actions {
+    action {
+        Brake
+        arguments {}
+        local_variables {}
+        read_variables {}
+        write_variables { accel }
+        initial_values {}
+        update {
+            variable_statement {
+                accel
+                assign { result { -1.0 } }
+            }
+            return_statement { result { success } }
+        }
+    }
+    action {
+        Cruise
+        arguments {}
+        local_variables {}
+        read_variables {}
+        write_variables {}
+        initial_values {}
+        update {
+            return_statement { result { success } }
+        }
+    }
+}
+sub_trees {}
+tree {
+    composite {
+        Envelope selector
+        children {
+            composite {
+                SafetyBranch sequence
+                children {
+                    OutsideFence {}
+                    Brake {}
+                }
+            }
+            Cruise {}
+        }
+    }
+}
+tick_prerequisite { True }
+specifications {
+    INVARSPEC { (lte, x, 1.5) }
+}

@@ -36,6 +36,12 @@ from auto_LiRPA.perturbations import PerturbationLpNorm
 from nsbt import BRAKE, DT, FENCE, HARD_LIMIT, NET
 
 X0_LO, X0_HI = -2.0, 0.9
+X_TOP, V_TOP = FENCE, 1.5      # the top edge of the contract grid, closed there
+
+
+def _upper(var, hi, top):
+    """Half-open above, except at the grid's top edge which must stay closed."""
+    return var <= hi if abs(hi - top) < 1e-12 else var < hi
 V_RANGE = (-1.5, 1.5)          # the box the contracts are built over
 
 
@@ -79,8 +85,13 @@ def compositional(cells, steps, v0_bound):
         # the behavior tree: outside the fence brake, inside use the network
         solver.add(z3.Implies(x[k] >= FENCE, a == -BRAKE))
         for xlo, xhi, vlo, vhi, alo, ahi in cells:
+            # half-open cells [lo, hi) so exactly ONE contract fires per
+            # point. With closed cells, corner-touching cells both fire and
+            # their guarantees intersect to a single value, over-constraining
+            # the abstraction and potentially hiding counterexamples.
             guard = z3.And(x[k] < FENCE,
-                           x[k] >= xlo, x[k] <= xhi, v[k] >= vlo, v[k] <= vhi)
+                           x[k] >= xlo, _upper(x[k], xhi, X_TOP),
+                           v[k] >= vlo, _upper(v[k], vhi, V_TOP))
             solver.add(z3.Implies(guard, z3.And(a >= alo, a <= ahi)))
         solver.add(x[k + 1] == x[k] + v[k] * DT, v[k + 1] == v[k] + a * DT)
     solver.add(z3.Or([x[k] > HARD_LIMIT for k in range(steps + 1)]))
@@ -166,8 +177,13 @@ def sanity(cells, steps, v0_bound):
         solver.add(a >= -1, a <= 1)
         solver.add(z3.Implies(x[k] >= FENCE, a == -BRAKE))
         for xlo, xhi, vlo, vhi, alo, ahi in cells:
+            # half-open cells [lo, hi) so exactly ONE contract fires per
+            # point. With closed cells, corner-touching cells both fire and
+            # their guarantees intersect to a single value, over-constraining
+            # the abstraction and potentially hiding counterexamples.
             guard = z3.And(x[k] < FENCE,
-                           x[k] >= xlo, x[k] <= xhi, v[k] >= vlo, v[k] <= vhi)
+                           x[k] >= xlo, _upper(x[k], xhi, X_TOP),
+                           v[k] >= vlo, _upper(v[k], vhi, V_TOP))
             solver.add(z3.Implies(guard, z3.And(a >= alo, a <= ahi)))
         solver.add(x[k + 1] == x[k] + v[k] * DT, v[k + 1] == v[k] + a * DT)
 
