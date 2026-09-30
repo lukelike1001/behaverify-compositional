@@ -17,6 +17,7 @@ Usage:
     ./collab.py claim  <agent> "<statement>" [--evidence "<how to check>"]
     ./collab.py verify <agent> <id> "<what you did to confirm>"
     ./collab.py refute <agent> <id> "<what you found instead>"
+    ./collab.py amend  <agent> <id> "<correction to your own claim>"
     ./collab.py status [--all]
     ./collab.py show   <id>
     ./collab.py log [-n N]
@@ -89,9 +90,12 @@ class Ledger:
                     "checks": [],
                 }
             elif claim_id in state:
-                state[claim_id]["status"] = (
-                    "verified" if event["kind"] == "verify" else "refuted"
-                )
+                # an amendment corrects the claim; only the OTHER agent's
+                # verdict moves its status
+                if event["kind"] in ("verify", "refute"):
+                    state[claim_id]["status"] = (
+                        "verified" if event["kind"] == "verify" else "refuted"
+                    )
                 state[claim_id]["checks"].append(
                     f"{event['kind']} by {event['agent']}: {event['note']}"
                 )
@@ -128,6 +132,32 @@ def claim(agent: str, statement: str, evidence: str) -> None:
     _note(agent, f"**CLAIM #{claim_id}** (unverified) — "
                  f"{_summary(statement)}  `./collab.py show {claim_id}`")
     print(f"claim #{claim_id} recorded as unverified")
+
+
+def amend(agent: str, claim_id: int, note: str) -> None:
+    """Correct your OWN claim without erasing what it originally said.
+
+    A claim is append-only, so an author who finds a number wrong cannot fix
+    it in place, and a refutation by the other agent is the wrong instrument
+    for self-correction. Without this, a corrected figure lives only in a
+    discussion post and `show` keeps printing the stale one -- which is
+    exactly how claim #62's overstated contract count survived long enough to
+    be repeated in a later summary.
+    """
+    ledger = Ledger.load()
+    state = ledger.fold()
+    if claim_id not in state:
+        raise SystemExit(f"no claim #{claim_id}")
+    if state[claim_id]["author"] != agent:
+        raise SystemExit(
+            f"claim #{claim_id} is {state[claim_id]['author']}'s; "
+            f"use refute, not amend"
+        )
+    ledger.record({"kind": "amend", "id": claim_id, "agent": agent,
+                   "when": _now(), "note": note})
+    _note(agent, f"**AMEND #{claim_id}** — {_summary(note)}  "
+                 f"`./collab.py show {claim_id}`")
+    print(f"claim #{claim_id} amended by {agent}")
 
 
 def judge(agent: str, claim_id: int, note: str, kind: str) -> None:
@@ -192,7 +222,7 @@ def main() -> None:
     claimer.add_argument("agent", choices=AGENTS)
     claimer.add_argument("statement")
     claimer.add_argument("--evidence", default="")
-    for kind in ("verify", "refute"):
+    for kind in ("verify", "refute", "amend"):
         judger = sub.add_parser(kind)
         judger.add_argument("agent", choices=AGENTS)
         judger.add_argument("id", type=int)
@@ -209,6 +239,8 @@ def main() -> None:
         post(args.agent, args.message)
     elif args.command == "claim":
         claim(args.agent, args.statement, args.evidence)
+    elif args.command == "amend":
+        amend(args.agent, args.id, args.note)
     elif args.command in ("verify", "refute"):
         judge(args.agent, args.id, args.note, args.command)
     elif args.command == "status":

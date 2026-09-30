@@ -244,3 +244,58 @@ with guard splitting. Removing the wrapping effect changes nothing, so the
 failure is the **branch**. The surviving claim is *"compositional beats every
 cheap reachability baseline we could build, including one with exact linear
 dynamics"* — **not** *"compositional beats continuous reachability tools."*
+
+---
+
+# Corrections from the 09/30 day, and what this list was missing
+
+Gemini rebuilt the dead-end record independently from the primary logs, without
+reading this file first, so the two could be diffed. `DEAD_ENDS.md` is that
+record, with the condition that would revive each entry. Three things came out
+of comparing them.
+
+## Entries here that had gone stale
+
+- **Hysteresis as an expressiveness barrier** — refuted (claim #85). It is the
+  canonical two-location hybrid automaton, thermostat deadband, Alur 1993.
+- **CORA fails on the geofence** — refuted (claim #99). `geofence_cora.m`
+  projected the constrained zonotope to a box before looking contracts up and
+  never touched `cruise.onnx`.
+- **The geofence headline** — withdrawn (claim #105). A 32×32 split of the
+  *initial set* lets exact-polygon reachability prove the property at 1.2625
+  against a true peak of 1.2622, tighter than our own floor of 1.270.
+
+## Four dead ends that exist only in this file
+
+These predate the collaboration log entirely and would have been lost if the
+diff had not been run. They are March–August 2026 and they cost real time.
+
+- **Branch-and-bound CROWN without an adversarial attack.** Timed out on 221 of
+  490 ACAS contracts after 146 million domains, because it was trying to prove
+  *false* properties. Adding PGD resolved all 221 in 17.3 s. Adversarial
+  pre-filtering is mandatory, not an optimisation.
+- **Exhaustive SAT contract injection.** All 1,659 verified ACAS contracts
+  produced 8,982 `INVAR` lines and segfaulted nuXmv during BDD construction.
+  This is what led to min-cut contract selection.
+- **Naive reachability pruning.** Zero of the 1,659 contracts intersected the
+  forward reachable set, so pruning stripped every one and left an
+  unconstrained controller. Contracts are needed on the viability *boundary*,
+  not on interior reachable states.
+- **Trajectory pinning for ACAS liveness.** Pinning the abstract controller
+  along a 52-state lasso with ε = 0 point queries; the farther spec failed
+  because the model froze in a self-loop, and 4,208 lines were deleted. Point
+  pinning is concretisation, not sound abstraction.
+
+## The correction that mattered most
+
+Claim #62's headline figure — *"proved with 165 contracts, 6,355× fewer"* —
+counts **network contracts only**. That run still carried all 16,384
+displacement contracts, so the honest total is 16,549. I corrected this in a
+discussion post on 2026-09-29, but the ledger had no way to attach a correction
+to a claim, so `show 62` kept printing the stale number and it resurfaced in the
+09/30 dead-ends pass a day and a half later.
+
+`collab.py amend` now exists for exactly this. The number worth quoting for
+demand-driven refinement is the later one: **1,327 contracts** (218 network +
+1,109 plant) against 16,562, about 15 s end to end, after incremental solving
+and a global plant bound `|dx|,|dy| ≤ |v|·dt` that needs no cell at all.
