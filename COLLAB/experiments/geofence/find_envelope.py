@@ -33,20 +33,21 @@ def main():
     tree = Tree()
     print(f"fence {FENCE}, hard limit {HARD_LIMIT}, brake 1.0, dt {DT}")
     print(f"{'x0 <=':>7} {'|v0| <=':>8} {'max x':>8}  verdict")
-    best = None
+    safe = []
     for x_hi in (0.0, 0.5, 0.9, 1.0):
         for v_hi in (0.5, 0.8, 1.0, 1.2):
             worst = worst_over(tree, x_hi, v_hi)
             ok = worst <= HARD_LIMIT
             print(f"{x_hi:>7.2f} {v_hi:>8.2f} {worst:>8.4f}  "
                   f"{'safe' if ok else 'VIOLATED'}")
-            if ok and (best is None or x_hi * v_hi >= best[0] * best[1]):
-                best = (x_hi, v_hi, worst)
-    if best:
-        print(f"\nlargest safe envelope found: x0 <= {best[0]}, |v0| <= {best[1]}, "
-              f"max x = {best[2]:.4f}, margin {HARD_LIMIT - best[2]:.4f}")
-    else:
+            if ok:
+                safe.append((x_hi, v_hi, worst))
+    if not safe:
         print("\nno safe envelope in the scanned range")
+        return
+    x_hi, v_hi, worst = max(safe, key=lambda e: e[0] * e[1])
+    print(f"\nlargest safe envelope found: x0 <= {x_hi}, |v0| <= {v_hi}, "
+          f"max x = {worst:.4f}, margin {HARD_LIMIT - worst:.4f}")
 
 
 if __name__ == "__main__":

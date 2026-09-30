@@ -28,6 +28,8 @@ warnings.filterwarnings("ignore")
 import numpy as np
 import torch
 import z3
+
+from train_controller import Controller
 from auto_LiRPA import BoundedModule, BoundedTensor
 from auto_LiRPA.perturbations import PerturbationLpNorm
 
@@ -37,9 +39,9 @@ X0_LO, X0_HI = -2.0, 0.9
 V_RANGE = (-1.5, 1.5)          # the box the contracts are built over
 
 
-def crown_cells(grid, v0_bound):
+# pylint: disable-next=too-many-locals
+def crown_cells(grid):
     """CROWN bounds on the network's acceleration, per cell of an (x,v) grid."""
-    from train_controller import Controller
     model = Controller()
     model.load_state_dict(torch.load(
         pathlib.Path(NET).with_suffix(".pt"), weights_only=True))
@@ -62,6 +64,7 @@ def crown_cells(grid, v0_bound):
     return cells
 
 
+# pylint: disable-next=too-many-locals
 def compositional(cells, steps, v0_bound):
     """Keep the branch as a guard, so each state uses its own controller."""
     solver = z3.Solver()
@@ -85,6 +88,7 @@ def compositional(cells, steps, v0_bound):
     return res, time.time() - t0
 
 
+# pylint: disable-next=too-many-locals
 def per_step_box(cells, steps, v0_bound):
     """One box per step, so a straddling box must admit BOTH branches."""
     xlo, xhi, vlo, vhi = X0_LO, X0_HI, -v0_bound, v0_bound
@@ -115,13 +119,14 @@ def _crown_hull(cells, xlo, xhi, vlo, vhi):
     return (min(los) if los else -1.0), (max(his) if his else 1.0)
 
 
+# pylint: disable-next=too-many-locals
 def main():
     """Run both methods on the same system and report which proves the property."""
     steps = int(sys.argv[1]) if len(sys.argv) > 1 else 40
     v0 = float(sys.argv[2]) if len(sys.argv) > 2 else 0.8
     grid = int(sys.argv[3]) if len(sys.argv) > 3 else 12
 
-    cells = crown_cells(grid, v0)
+    cells = crown_cells(grid)
     print(f"geofence NSBT: x0 in [{X0_LO}, {X0_HI}], |v0| <= {v0}, "
           f"{steps} steps, {grid}x{grid} grid ({len(cells)} contracts)")
 
@@ -137,6 +142,7 @@ def main():
 
 
 
+# pylint: disable-next=too-many-locals
 def sanity(cells, steps, v0_bound):
     """Guard against a vacuous proof.
 

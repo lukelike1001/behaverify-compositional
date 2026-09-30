@@ -42,6 +42,7 @@ X0 = (-2.0, 2.0)          # the region the drone may start in
 V0 = (-1.0, 1.0)
 
 
+# pylint: disable-next=too-few-public-methods
 class Tree:
     """The behavior tree, executed concretely. Returns (accel, active_node)."""
 
@@ -76,7 +77,7 @@ def main():
 
     for x0 in np.linspace(*X0, 41):
         for v0 in np.linspace(*V0, 21):
-            for x, v, _, node in simulate(tree, float(x0), float(v0), 80):
+            for x, _, _, node in simulate(tree, float(x0), float(v0), 80):
                 total += 1
                 if x > worst_x:
                     worst_x, worst_at = x, (x0, v0)
