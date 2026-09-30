@@ -1,0 +1,133 @@
+#{
+    The geofence NSBT with HYSTERESIS, and a specification about NODE STATUS.
+
+    selector
+      |-- sequence
+      |     |-- ShouldBrake?    x >= 1.0  or  (braking and x >= 0.7)
+      |     +-- Brake           accel := -1.0 ;  braking := True
+      +-- sequence
+            |-- Release         braking := False
+            +-- Cruise          accel free, constrained by CROWN contracts
+
+    WHY THE LATCH. Releasing a safety brake the instant the boundary is cleared
+    makes the controller chatter, so real envelopes keep braking until the state
+    is comfortably back inside. That makes the active node depend on tree
+    HISTORY, not just on (x, v): two executions can sit at the same continuous
+    state with different nodes active (COLLAB/experiments/geofence/latched.py).
+
+    WHY THE SPECIFICATION MATTERS. It is about which NODE is active, not about
+    where the drone is:
+
+        active(Brake)  ->  x >= 0.7
+
+    In words: the brake is only ever engaged inside the hysteresis band, so the
+    latch really does release. A reachability tool computes reachable sets over
+    R^n and has no notion of node activation, so it cannot state this property
+    at all - and neither can a neural network verifier. This is the category of
+    property BehaVerify can express and nothing else in the continuous-state
+    literature can.
+}#
+
+configuration {
+    use_reals
+}
+enumerations {}
+constants {}
+variables {
+    variable { env x VAR REAL assign { result { 0 } } }
+    variable { env v VAR REAL assign { result { 0 } } }
+    variable { bl accel VAR REAL assign { result { 0 } } }
+    variable { bl braking VAR BOOLEAN assign { result { False } } }
+}
+environment_update {
+    variable_statement {
+        x
+        assign { result { (add, x, (mult, 0.1, v)) } }
+    }
+    variable_statement {
+        v
+        assign { result { (add, v, (mult, 0.1, accel)) } }
+    }
+}
+checks {}
+environment_checks {
+    environment_check {
+        ShouldBrake
+        arguments {}
+        read_variables { braking }
+        condition {
+            (or,
+                (gte, x, 1.0),
+                (and, braking, (gte, x, 0.7))
+            )
+        }
+    }
+}
+actions {
+    action {
+        Brake
+        arguments {}
+        local_variables {}
+        read_variables {}
+        write_variables { accel, braking }
+        initial_values {}
+        update {
+            variable_statement { accel assign { result { -1.0 } } }
+            variable_statement { braking assign { result { True } } }
+            return_statement { result { success } }
+        }
+    }
+    action {
+        Release
+        arguments {}
+        local_variables {}
+        read_variables {}
+        write_variables { braking }
+        initial_values {}
+        update {
+            variable_statement { braking assign { result { False } } }
+            return_statement { result { success } }
+        }
+    }
+    action {
+        Cruise
+        arguments {}
+        local_variables {}
+        read_variables {}
+        write_variables {}
+        initial_values {}
+        update {
+            return_statement { result { success } }
+        }
+    }
+}
+sub_trees {}
+tree {
+    composite {
+        Envelope selector
+        children {
+            composite {
+                SafetyBranch sequence
+                children {
+                    ShouldBrake {}
+                    Brake {}
+                }
+            }
+            composite {
+                CruiseBranch sequence
+                children {
+                    Release {}
+                    Cruise {}
+                }
+            }
+        }
+    }
+} end_tree
+tick_prerequisite { True }
+specifications {
+    #{ safety: the drone never passes the hard limit }#
+    INVARSPEC { (lte, x, 1.5) }
+    #{ NODE STATUS: the brake only engages inside the hysteresis band, i.e. the
+       latch really does release. No reachability tool can state this. }#
+    INVARSPEC { (implies, (active, Brake), (gte, x, 0.7)) }
+}

@@ -32,7 +32,8 @@ from compare import crown_cells                                   # noqa: E402
 from dsl_with_abstract_control_to_nuxmv import (                  # noqa: E402
     AbstractControlPatcher, Contract, RegionBound)
 
-TREE = pathlib.Path(__file__).resolve().parent / "geofence.tree"
+HERE = pathlib.Path(__file__).resolve().parent
+TREE = HERE / "geofence.tree"
 NUXMV = "REPRODUCIBILITY/2026_TBA/nuXmv_DL/bin/nuXmv"
 CONTROL = "accel_stage_0"
 
@@ -81,8 +82,11 @@ def contracts_from_crown(grid):
 
 def main():
     """Generate, patch, and report what the pipeline produced."""
+    global TREE                                       # noqa: PLW0603
     grid = int(sys.argv[1]) if len(sys.argv) > 1 else 8
-    out = pathlib.Path("/tmp/geofence_behaverify")
+    if len(sys.argv) > 2:
+        TREE = HERE / sys.argv[2]
+    out = pathlib.Path(f"/tmp/bv_{TREE.stem}")
     smv_path = generate(out)
     smv = smv_path.read_text()
     print(f"BehaVerify generated {smv_path.name}: {len(smv.splitlines())} lines")
@@ -99,7 +103,7 @@ def main():
           f"{len(clashes)} inconsistent pairs")
 
     patched = patcher.patch(smv, CONTROL, contracts)
-    dest = out.parent / "geofence_contracts.smv"
+    dest = out.parent / f"{TREE.stem}_contracts.smv"
     dest.write_text(patched)
     print(f"  patched model        : {dest} "
           f"({len(patched.splitlines())} lines)")
