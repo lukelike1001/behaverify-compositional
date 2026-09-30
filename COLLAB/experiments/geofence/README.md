@@ -106,6 +106,50 @@ python3 find_envelope.py          # the derived operating envelope
 python3 compare.py 20 0.8 12      # the head-to-head
 ```
 
+## v2: hysteresis, and where the expressiveness argument actually bites
+
+In the tree above, the active node is a function of `x` alone — `x >= FENCE`
+means `Brake`. A reachability tool could therefore express *"Brake is active"*
+as the state predicate `x >= FENCE`, so the expressiveness claim does not yet
+bite.
+
+Real safety envelopes do not work that way. Releasing a brake the instant the
+boundary is cleared makes the controller **chatter**, so engineers add
+hysteresis — braking continues until the state is comfortably back inside. That
+turns the envelope into a latch:
+
+```
+selector
+  |-- sequence
+  |     |-- ShouldBrake?   x >= FENCE  OR  (braking AND x >= FENCE - 0.3)
+  |     +-- Brake          a := -1.0 ;  braking := True
+  +-- sequence
+        |-- ReleaseLatch   braking := False
+        +-- NeuralCruise   a := net(x, v)
+```
+
+Sweeping 1,485 starts × 30 steps over 10,917 distinct (x, v) cells finds states
+where **the same continuous state carries different active nodes**:
+
+| at (x=1.0, v=0.12) | active node | latch |
+|---|---|---|
+| from start (0.65, 0.80) | `Brake` | set |
+| from start (0.73, 0.70) | `NeuralCruise` | clear |
+
+A tool tracking only (x, v) cannot tell these apart — **not imprecisely, but in
+principle**, because the distinguishing information is not in (x, v) at all.
+
+This also gives the benchmark a property of the right shape: *"Brake never stays
+active for more than N consecutive ticks"* (measured worst case: 12) is a
+statement about the **tree's** state, not the drone's position — and is what a
+safety engineer actually writes.
+
+**The obvious objection, and why it is the point.** One could answer that the
+latch is just another state variable, so track (x, v, braking) in 3-D. True —
+and that means encoding the tree into the state space *by hand*. That
+translation is exactly what nobody has automated, and what BehaVerify does from
+the DSL for free.
+
 ## What this is and is not
 
 **Is:** a pilot. One tree, one branch, one network, two continuous variables. It
