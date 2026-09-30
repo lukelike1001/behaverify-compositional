@@ -72,7 +72,7 @@ def crown_cells(grid, model=None):
 
 
 # pylint: disable-next=too-many-locals
-def compositional(cells, steps, v0_bound):
+def compositional(cells, steps, v0_bound, limit=HARD_LIMIT):
     """Keep the branch as a guard, so each state uses its own controller."""
     solver = z3.Solver()
     x = [z3.Real(f"x_{k}") for k in range(steps + 1)]
@@ -94,15 +94,19 @@ def compositional(cells, steps, v0_bound):
                            v[k] >= vlo, _upper(v[k], vhi, V_TOP))
             solver.add(z3.Implies(guard, z3.And(a >= alo, a <= ahi)))
         solver.add(x[k + 1] == x[k] + v[k] * DT, v[k + 1] == v[k] + a * DT)
-    solver.add(z3.Or([x[k] > HARD_LIMIT for k in range(steps + 1)]))
+    solver.add(z3.Or([x[k] > limit for k in range(steps + 1)]))
     t0 = time.time()
     res = solver.check()
     return res, time.time() - t0
 
 
 # pylint: disable-next=too-many-locals
-def per_step_box(cells, steps, v0_bound):
-    """One box per step, so a straddling box must admit BOTH branches."""
+def per_step_box(cells, steps, v0_bound, limit=HARD_LIMIT):
+    """One box per step, so a straddling box must admit BOTH branches.
+
+    A limit of ``math.inf`` disables the early exit, so the return value is the
+    peak over the whole horizon rather than the first crossing.
+    """
     xlo, xhi, vlo, vhi = X0_LO, X0_HI, -v0_bound, v0_bound
     worst = xhi
     for _ in range(steps):
@@ -116,7 +120,7 @@ def per_step_box(cells, steps, v0_bound):
         xlo, xhi = xlo + vlo * DT, xhi + vhi * DT
         vlo, vhi = vlo + alo * DT, vhi + ahi * DT
         worst = max(worst, xhi)
-        if worst > HARD_LIMIT:
+        if worst > limit:
             return "violated", worst
     return "safe", worst
 

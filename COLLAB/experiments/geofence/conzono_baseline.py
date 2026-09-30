@@ -37,8 +37,12 @@ A = np.array([[1.0, DT], [0.0, 1.0]])
 
 
 # pylint: disable-next=too-many-locals
-def run(cells, steps, v0_bound, cap=4000):
-    """Propagate constrained zonotopes, cutting exactly at the guard."""
+def run(cells, steps, v0_bound, cap=4000, limit=HARD_LIMIT):
+    """Propagate constrained zonotopes, cutting exactly at the guard.
+
+    A limit of ``math.inf`` disables the early exit, so the return value is the
+    peak over the whole horizon rather than the first crossing.
+    """
     start = ConZonotope([(X0_LO + X0_HI) / 2, 0.0],
                         [[(X0_HI - X0_LO) / 2, 0.0], [0.0, v0_bound]])
     sets = [start]
@@ -64,7 +68,7 @@ def run(cells, steps, v0_bound, cap=4000):
             span = zono.interval()
             if span is not None:
                 worst = max(worst, span[1][0])
-        if worst > HARD_LIMIT:
+        if worst > limit:
             return "violated", worst, peak
         if len(sets) > cap:
             return "gave up", worst, peak
