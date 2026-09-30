@@ -192,3 +192,36 @@ Comparing this independently compiled record against `COLLAB/AVENUES.md` (which 
 - **Hysteresis as an expressiveness barrier (AVENUES #79):** `AVENUES.md` still recorded hysteresis as a live expressiveness demonstration; this was refuted in Claim #85 (it is a standard 2-location hybrid automaton).
 - **CORA failure on the geofence (AVENUES #80):** `AVENUES.md` recorded that zonotopes failed on the geofence; Claim #99 asserting "CORA itself fails" was formally refuted on 09/30 because `geofence_cora.m` discarded state-control correlations via bounding box projections and Minkowski sums.
 - **Geofence headline viability (AVENUES #77–78, #81–85):** `AVENUES.md` still treated the continuous geofence proof as an unassailable headline; Claim #105 formally withdrew the headline after showing a $32 \times 32$ initial-set split enables exact-polygon reachability to prove the property at $1.2625$ vs $1.2622$, tighter than compositional Z3's $1.270$ floor.
+
+---
+
+## grid_world_big (50x50) as a "the table already loses" benchmark
+
+**Tried:** Proposing the 50×50 grid world as the discrete benchmark where the
+monolithic table has a recorded failure — the 2026-04-07 plan notes INVAR
+verified in ~29 s while CTL timed out after one hour — and where compositional
+liveness contracts could therefore win.
+
+**Why it failed:** `grid_world_big` has **no neural network**.
+`template_fake_network_SCALE.tree` declares
+`variable { bl network DEFINE ENUM assign { REPLACE_FAKE_NETWORK } }`, and the
+23 MB `grid_world_big.tree` is that placeholder expanded into a generated `case`
+chain. There is no ONNX and nothing for CROWN to bound, so there is no
+incumbent to beat. Worse for the proposal: those cases are already *ranges*
+(`(lte,23, drone_x), (lte, drone_x, 25)`), 153,565 of them covering 50⁴ =
+6,250,000 points — about 41× region-compressed, structurally the same shape
+region-merged contracts would produce. The experiment has effectively already
+been run in its most favourable form and nuXmv still timed out.
+
+**Would revive it if:** someone trains a real network for the 50×50 map *and*
+the trivial-network test below shows the CTL timeout is caused by the encoding
+rather than by the state space. Both conditions, not either.
+
+**The open sub-question, which needs no network:** the 50×50 CTL timeout could
+be caused by (a) the 23 MB case chain bloating the transition relation's BDD,
+which a compact contract set would fix, or (b) the 6.25M (drone, goal) state
+space, which contracts cannot touch because they change the network encoding
+and not the state count. Nothing in the record separates these. The test is to
+run CTL on the same grid with a *trivial* network — one case, or a constant
+direction. Success means the encoding was the bottleneck; a timeout means
+scaling the grid is dead for reasons unrelated to neural networks.
