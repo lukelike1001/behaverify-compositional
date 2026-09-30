@@ -61,3 +61,7 @@ REPRODUCIBILITY/2026_TBA/uclid-0.9.5/
 
 # nuXmv MathSAT scratch files
 msat_bmc_solve_invar.*
+
+# Confidential peer review material - never commit
+atva26-reviews-*.txt
+*-reviews-*.txt
