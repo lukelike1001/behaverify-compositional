@@ -175,6 +175,32 @@ and that means encoding the tree into the state space *by hand*. That
 translation is exactly what nobody has automated, and what BehaVerify does from
 the DSL for free.
 
+### Seed robustness
+
+Retraining the controller from four independent seeds and re-running the whole
+comparison on each:
+
+| seed | true max x | per-step | compositional |
+|---|---|---|---|
+| 0 | 1.2622 | violated | **safe** |
+| 1 | 1.2603 | violated | **safe** |
+| 2 | 1.2609 | violated | **safe** |
+| 3 | 1.2639 | violated | **safe** |
+
+The ordering is a property of the **system** — a branch that flips the sign of
+the acceleration — not of one set of weights.
+
+### What this prototype has survived
+
+| attack | outcome |
+|---|---|
+| baseline is a strawman | guard-splitting also fails (1.5498), also does not converge |
+| artifact of one network | four seeds, same verdict |
+| the proof is vacuous | guard confirms executions exist and state can change |
+| just needs a finer grid | 16× refinement changes neither reachability variant |
+| the envelope was chosen to fit | derived after the first choice made the property *false*; matches braking physics |
+| the horizon is too short | true worst case at step 11; 20- and 40-step proofs both succeed |
+
 ## What this is and is not
 
 **Is:** a pilot. One tree, one branch, one network, two continuous variables. It

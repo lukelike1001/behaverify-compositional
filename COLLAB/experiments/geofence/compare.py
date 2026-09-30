@@ -40,12 +40,13 @@ V_RANGE = (-1.5, 1.5)          # the box the contracts are built over
 
 
 # pylint: disable-next=too-many-locals
-def crown_cells(grid):
+def crown_cells(grid, model=None):
     """CROWN bounds on the network's acceleration, per cell of an (x,v) grid."""
-    model = Controller()
-    model.load_state_dict(torch.load(
-        pathlib.Path(NET).with_suffix(".pt"), weights_only=True))
-    model.eval()
+    if model is None:
+        model = Controller()
+        model.load_state_dict(torch.load(
+            pathlib.Path(NET).with_suffix(".pt"), weights_only=True))
+        model.eval()
     bounded = BoundedModule(model, torch.zeros(1, 2))
     xs = np.linspace(X0_LO, FENCE, grid + 1)
     vs = np.linspace(*V_RANGE, grid + 1)
