@@ -276,7 +276,62 @@ it is evidence the problem is real, and evidence it may not yield.
 
 ---
 
-## 10. One-paragraph version
+## 10. A pilot, built the same night
+
+The argument above would be worth little without a system it actually holds on,
+so one was built: `COLLAB/experiments/geofence/`.
+
+**The system.** A learned cruise controller (2→8→8→1 ReLU) wrapped in a
+hand-written safety envelope:
+
+```
+selector[ sequence[ x >= 1.0 ?, Brake(a := -1) ],  NeuralCruise(a := net(x,v)) ]
+x' = x + v·dt      v' = v + a·dt
+```
+
+Safety: `x` never exceeds 1.5.
+
+**Why that shape.** It is not chosen to suit the method — it is the architecture
+Sprague & Ögren proposed at CDC 2022 ("Adding Neural Network Controllers to
+Behavior Trees without Destroying Performance Guarantees"). They enforce the
+guarantee at *runtime*, treating the network as an untrusted black box. We
+verify the closed loop *offline*, over its actual weights.
+
+It is also the smallest system a single interval box cannot represent: the two
+branches accelerate in **opposite** directions, so a state set straddling the
+fence splits into disjoint clusters. From `x ∈ [0.95, 1.05]`, after one step the
+reachable velocity is the two-point set {−0.2, +0.2}, while the box admits
+v = 0 — which the system can never have.
+
+**The result.** Same contracts, same property, 20 steps:
+
+| method | verdict |
+|---|---|
+| per-step interval reachability | **violated** (1.5298 — spurious; the true max is 1.2622) |
+| compositional (Z3) | **safe**, 5.9 s |
+
+**What it survived.** Guard-splitting reachability, which is what Flow* and CORA
+actually do, *also* fails (1.5498) and also does not converge. A 16× finer grid
+changes neither reachability variant to four decimal places. Four independent
+training seeds give the same verdict. The proof is checked non-vacuous. At a
+six-guard ladder, splitting's set count explodes 484 → 134,902 while
+compositional grows 1.9 s → 17.8 s — and compositional is correct on all five
+ladders, including the one where the property is genuinely **false**.
+
+**And it runs through BehaVerify itself** — `geofence.tree` → DSL → SMV with
+`real` state and real BT node semantics → contracts injected. Every NAV
+experiment bypassed the DSL; this one does not.
+
+Two of our own tools caught two of our own bugs along the way: the contract
+consistency checker found that corner-touching cells pin the control to a single
+value (a bug the hand-written encoding shared), and nuXmv found that freeing the
+control leaves it unbounded outside the contract grid.
+
+**What it is not.** A double integrator, one branch, one invariant. A benchmark
+worth publishing needs a domain-native plant, real mission structure, and
+properties over node status. This is the pilot episode, not the season.
+
+## 11. One-paragraph version
 
 Modern robots are part hand-written decision logic (behavior trees) and part
 learned control (neural networks). Neural network verifiers prove one-step facts
