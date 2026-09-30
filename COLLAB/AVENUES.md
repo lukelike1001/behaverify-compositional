@@ -173,3 +173,45 @@ It stops being "author a benchmark from nothing," which is a large and risky
 thing for a first-year, and becomes "add a learned controller to a drone mission
 BT the group has already built, submitted three times, and can hand to BT2Fiacre
 and BT2BIP in its existing network-free form."
+
+---
+
+# The night of 09/30: the first positive result on continuous state
+
+## 64–70: the literature gap, checked adversarially
+
+64. Gemini audited **all 11 works citing** Sprague & Ögren's continuous-time BT semantics (IEEE L-CSS 2022) and found **none** build verification on them.
+65. The only formal-verification papers citing it are this group's own FMAS 2024 papers.
+66. Nobody has verified a behavior tree in CORA, JuliaReach, Flow*, SpaceEx, KeYmaera X or NNV.
+67. NNV and BehaVerify are both Taylor Johnson's lab and have been kept strictly partitioned.
+68. The closest work is **Sprague & Ögren, CDC 2022** — a BT as a *runtime* fallback around an **unverified** network, with safety from switching to a certified classical controller online.
+69. VCAS is the only ARCH-COMP AINNCS benchmark with discrete supervisory logic, but it is flat — no hierarchy, no fallback, no node activation.
+70. Honest probability the gap is already filled: **under 5%**.
+
+## 71–79: the geofence pilot
+
+71. NAV failed because its tree never branches, so the obvious fix is a benchmark whose branch a box cannot represent.
+72. A box only loses when the branch makes the reachable set **non-convex** — droneNew's ±1 walk gives an interval, so a box is exact there.
+73. A **geofence** does it: the branches accelerate in opposite directions, so a straddling set splits into disjoint velocity clusters.
+74. Measured: from x ∈ [0.95, 1.05], after one step the reachable v is the two-point set {−0.2, +0.2} while the box admits v = 0, which the system can never have.
+75. The architecture is **not invented** — a safety envelope wrapping a learned controller is exactly Sprague & Ögren's CDC 2022 design.
+76. The operating envelope was **derived**: my first initial set made the property *false*, so the largest safe one was measured, and it matches the braking physics (√(2·1·0.5) = 1.0).
+77. **Result: per-step reachability reports violated (1.5298, spurious); compositional Z3 proves safe in 15.9 s** — with the same contracts and the same property.
+78. It holds at the razor-thin envelope too (margin 0.049): per-step 1.6499, compositional safe.
+79. Adding **hysteresis** makes node status stop being a function of (x, v): at (x=1.0, v=0.12) one execution is braking with the latch set and another is cruising with it clear.
+
+## 80–85: attacks on our own result, all survived
+
+80. **Strawman?** Guard-splitting reachability — what Flow*/CORA actually do — also fails (1.5498) and also does not converge.
+81. **Resolution?** 16× refinement leaves *both* reachability variants unchanged to four decimals.
+82. **One lucky network?** Four independent training seeds, same verdict every time.
+83. **Vacuous proof?** The guard confirms the model has executions and that state can change.
+84. **Horizon too short?** True worst case at step 11; 20- and 40-step proofs both succeed.
+85. Fragmentation is visible in the splitting baseline — 59–64 distinct sets by step 20, on a system with **one** guard.
+
+## Still not exhausted
+
+86. A domain-native plant (quadrotor, Dubins car) rather than a double integrator.
+87. A tree with real mission structure rather than one branch.
+88. Properties over node status discharged *automatically* from the DSL, which is the thing no other tool can do at all.
+89. Whether compositional still wins once the tree has many guards and the disjunction itself becomes expensive.
