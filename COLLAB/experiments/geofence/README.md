@@ -90,15 +90,18 @@ This mirrors the NAV feedback loop (claim #64) with the methods **reversed** —
 there it was compositional that could not escape by refining; here it is
 per-step.
 
-### The baseline is not a strawman
+### Making the baseline competent
 
-The obvious objection: `per_step_box` takes the **hull** of both branches when
-the box straddles. A competent hybrid-reachability tool would **split at the
-guard** and propagate each piece under its own dynamics — what Flow*, CORA and
-SpaceEx actually do at mode transitions. If splitting recovered the proof, the
-headline would have to be restated.
+> **Correction.** An earlier version of this section claimed `splitting_box.py`
+> implements "what Flow*, CORA and SpaceEx actually do." **That was a
+> strawman**, and Gemini was right to refute it. Those tools do not propagate
+> axis-aligned intervals — CORA uses zonotopes, Flow* Taylor models, SpaceEx
+> support functions — precisely because intervals lose the correlation between
+> `x` and `v` on coupled linear dynamics, a failure that has nothing to do with
+> guards. The claim below is the corrected one.
 
-`splitting_box.py` implements it. **It also fails**, and also does not converge:
+`splitting_box.py` splits at the guard and propagates intervals. It fails, and
+does not converge:
 
 | grid | contracts | verdict | max x | peak sets |
 |---|---|---|---|---|
@@ -112,8 +115,30 @@ backwards until you see why: the hull's lower acceleration bound is
 inside-piece uses `crown_lo` alone, typically greater than −1 and so permitting
 more speed. Neither over-approximation dominates; both are sound and both fail.
 
-The fragmentation cost is visible too — 59–64 distinct sets by step 20, on a
-system with **one** guard.
+**But intervals were the wrong baseline.** `zonotope_box.py` replaces them with
+zonotopes, which map *exactly* through a linear transformation and so have **no
+wrapping effect** on a double integrator:
+
+| baseline | max x | |
+|---|---|---|
+| interval, branch hull | 1.5298 | violated |
+| interval, guard split | 1.5498 | violated |
+| **zonotope, branch hull** | **1.5298** | violated |
+| **zonotope, guard split** | **1.5861** | violated (64 sets) |
+| compositional (Z3) | — | **safe** |
+
+Removing the wrapping effect entirely changes the answer by **nothing** (1.5298
+either way). So the baseline's failure is caused by the **branch**, not by the
+set representation — which is the claim worth making, and it is now measured.
+
+**What this still does not establish.** The zonotope guard-split re-fits an
+*axis-aligned* zonotope to each piece, because a zonotope is not closed under
+halfspace intersection. A tool using **constrained zonotopes** (CORA) or Taylor
+models with domain contraction (Flow*) preserves correlation through the cut and
+may do better. Until one is tested, the honest statement is *"compositional
+beats every cheap reachability baseline we could build, including one with exact
+linear dynamics"* — **not** *"compositional beats continuous reachability
+tools."*
 
 **The proof is not vacuous.** `compare.py`'s `sanity()` confirms the model has
 executions and that state can actually change. An UNSAT safety result on a
