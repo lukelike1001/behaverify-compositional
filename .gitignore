@@ -58,3 +58,6 @@ REPRODUCIBILITY/2025_NEUS/serbinowska25a.pdf
 # Rebuild with: git clone uclid-org/uclid, source get-z3-linux.sh, sbt universal:packageBin
 REPRODUCIBILITY/2026_TBA/uclid5/
 REPRODUCIBILITY/2026_TBA/uclid-0.9.5/
+
+# nuXmv MathSAT scratch files
+msat_bmc_solve_invar.*
