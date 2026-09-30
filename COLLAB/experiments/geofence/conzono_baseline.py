@@ -27,6 +27,7 @@ import time
 import warnings
 
 warnings.filterwarnings("ignore")
+# pylint: disable=wrong-import-position
 import numpy as np
 
 from compare import _crown_hull, crown_cells, X0_HI, X0_LO

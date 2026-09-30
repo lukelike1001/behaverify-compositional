@@ -25,6 +25,7 @@ import time
 import warnings
 
 warnings.filterwarnings("ignore")
+# pylint: disable=wrong-import-position
 import numpy as np
 import torch
 import z3
@@ -36,18 +37,32 @@ from auto_LiRPA.perturbations import PerturbationLpNorm
 from nsbt import BRAKE, DT, FENCE, HARD_LIMIT, NET
 
 X0_LO, X0_HI = -2.0, 0.9
-X_TOP, V_TOP = FENCE, 1.5      # the top edge of the contract grid, closed there
 
 
 def _upper(var, hi, top):
     """Half-open above, except at the grid's top edge which must stay closed."""
     return var <= hi if abs(hi - top) < 1e-12 else var < hi
+
+
+def _tops(cells):
+    """The grid's top edges, read off the cells rather than hard-coded.
+
+    They must track whatever range the grid was built over; hard-coding them
+    silently opens the top row when a wider velocity range is requested.
+    """
+    return max(c[1] for c in cells), max(c[3] for c in cells)
 V_RANGE = (-1.5, 1.5)          # the box the contracts are built over
 
 
 # pylint: disable-next=too-many-locals
-def crown_cells(grid, model=None):
-    """CROWN bounds on the network's acceleration, per cell of an (x,v) grid."""
+def crown_cells(grid, model=None, v_range=V_RANGE):
+    """CROWN bounds on the network's acceleration, per cell of an (x,v) grid.
+
+    ``v_range`` must cover every velocity the ABSTRACTION can reach, not just
+    the true system: outside the grid no contract fires, the control is free
+    in [-1, 1], and the abstract state runs away. That hole is what made the
+    60-step proof fail, and it is a coverage bug rather than a horizon limit.
+    """
     if model is None:
         model = Controller()
         model.load_state_dict(torch.load(
@@ -55,7 +70,7 @@ def crown_cells(grid, model=None):
         model.eval()
     bounded = BoundedModule(model, torch.zeros(1, 2))
     xs = np.linspace(X0_LO, FENCE, grid + 1)
-    vs = np.linspace(*V_RANGE, grid + 1)
+    vs = np.linspace(*v_range, grid + 1)
     cells = []
     for i in range(grid):
         for j in range(grid):
@@ -72,29 +87,43 @@ def crown_cells(grid, model=None):
 
 
 # pylint: disable-next=too-many-locals
-def compositional(cells, steps, v0_bound, limit=HARD_LIMIT):
-    """Keep the branch as a guard, so each state uses its own controller."""
+def build(cells, steps, v0_bound, limit=HARD_LIMIT):
+    """The compositional encoding, returned so callers can read a witness.
+
+    Keeps the branch as a guard, so each state uses its own controller rather
+    than the hull of both. The returned solver asserts that the limit IS
+    breached, so unsat is the proof and sat carries a counterexample trace.
+    """
     solver = z3.Solver()
+    x_top, v_top = _tops(cells)
     x = [z3.Real(f"x_{k}") for k in range(steps + 1)]
     v = [z3.Real(f"v_{k}") for k in range(steps + 1)]
+    a = [z3.Real(f"a_{k}") for k in range(steps)]
     solver.add(x[0] >= X0_LO, x[0] <= X0_HI,
                v[0] >= -v0_bound, v[0] <= v0_bound)
     for k in range(steps):
-        a = z3.Real(f"a_{k}")
-        solver.add(a >= -1, a <= 1)
+        solver.add(a[k] >= -1, a[k] <= 1)
         # the behavior tree: outside the fence brake, inside use the network
-        solver.add(z3.Implies(x[k] >= FENCE, a == -BRAKE))
+        solver.add(z3.Implies(x[k] >= FENCE, a[k] == -BRAKE))
         for xlo, xhi, vlo, vhi, alo, ahi in cells:
             # half-open cells [lo, hi) so exactly ONE contract fires per
             # point. With closed cells, corner-touching cells both fire and
             # their guarantees intersect to a single value, over-constraining
             # the abstraction and potentially hiding counterexamples.
             guard = z3.And(x[k] < FENCE,
-                           x[k] >= xlo, _upper(x[k], xhi, X_TOP),
-                           v[k] >= vlo, _upper(v[k], vhi, V_TOP))
-            solver.add(z3.Implies(guard, z3.And(a >= alo, a <= ahi)))
-        solver.add(x[k + 1] == x[k] + v[k] * DT, v[k + 1] == v[k] + a * DT)
+                           x[k] >= xlo, _upper(x[k], xhi, x_top),
+                           v[k] >= vlo, _upper(v[k], vhi, v_top))
+            solver.add(z3.Implies(guard, z3.And(a[k] >= alo, a[k] <= ahi)))
+        solver.add(x[k + 1] == x[k] + v[k] * DT, v[k + 1] == v[k] + a[k] * DT)
     solver.add(z3.Or([x[k] > limit for k in range(steps + 1)]))
+    return solver, x, v, a
+
+
+def compositional(cells, steps, v0_bound, limit=HARD_LIMIT, timeout_s=None):
+    """Decide the property; unsat proves it, sat means no proof at this grid."""
+    solver, _, _, _ = build(cells, steps, v0_bound, limit)
+    if timeout_s is not None:
+        solver.set("timeout", int(timeout_s * 1000))
     t0 = time.time()
     res = solver.check()
     return res, time.time() - t0
@@ -172,6 +201,7 @@ def sanity(cells, steps, v0_bound):
       moves      the model must actually progress (x must be able to differ from x0)
     """
     solver = z3.Solver()
+    x_top, v_top = _tops(cells)
     x = [z3.Real(f"x_{k}") for k in range(steps + 1)]
     v = [z3.Real(f"v_{k}") for k in range(steps + 1)]
     solver.add(x[0] >= X0_LO, x[0] <= X0_HI,
@@ -186,8 +216,8 @@ def sanity(cells, steps, v0_bound):
             # their guarantees intersect to a single value, over-constraining
             # the abstraction and potentially hiding counterexamples.
             guard = z3.And(x[k] < FENCE,
-                           x[k] >= xlo, _upper(x[k], xhi, X_TOP),
-                           v[k] >= vlo, _upper(v[k], vhi, V_TOP))
+                           x[k] >= xlo, _upper(x[k], xhi, x_top),
+                           v[k] >= vlo, _upper(v[k], vhi, v_top))
             solver.add(z3.Implies(guard, z3.And(a >= alo, a <= ahi)))
         solver.add(x[k + 1] == x[k] + v[k] * DT, v[k + 1] == v[k] + a * DT)
 
