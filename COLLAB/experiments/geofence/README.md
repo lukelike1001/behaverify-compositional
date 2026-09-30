@@ -90,6 +90,31 @@ This mirrors the NAV feedback loop (claim #64) with the methods **reversed** —
 there it was compositional that could not escape by refining; here it is
 per-step.
 
+### The baseline is not a strawman
+
+The obvious objection: `per_step_box` takes the **hull** of both branches when
+the box straddles. A competent hybrid-reachability tool would **split at the
+guard** and propagate each piece under its own dynamics — what Flow*, CORA and
+SpaceEx actually do at mode transitions. If splitting recovered the proof, the
+headline would have to be restated.
+
+`splitting_box.py` implements it. **It also fails**, and also does not converge:
+
+| grid | contracts | verdict | max x | peak sets |
+|---|---|---|---|---|
+| 12×12 | 144 | violated | 1.5498 | 59 |
+| 24×24 | 576 | violated | 1.5497 | 64 |
+| 48×48 | 2,304 | violated | 1.5497 | 64 |
+
+Splitting is *slightly worse* than the hull (1.5498 vs 1.5298), which looks
+backwards until you see why: the hull's lower acceleration bound is
+`min(crown_lo, −BRAKE) = −1`, which drags velocity **down**, while the split
+inside-piece uses `crown_lo` alone, typically greater than −1 and so permitting
+more speed. Neither over-approximation dominates; both are sound and both fail.
+
+The fragmentation cost is visible too — 59–64 distinct sets by step 20, on a
+system with **one** guard.
+
 **The proof is not vacuous.** `compare.py`'s `sanity()` confirms the model has
 executions and that state can actually change. An UNSAT safety result on a
 frozen or infeasible model proves everything and means nothing — Gemini caught
