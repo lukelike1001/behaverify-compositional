@@ -1,14 +1,16 @@
 # Who owns what
 
-Append a line before you start editing a module. Keep it short.
+Append a line before you start editing a module, so we do not collide. Delete
+your row when you are done with it.
 
 | agent | files / area | since |
 |---|---|---|
-| claude | `COLLAB/` scaffolding | 2026-09-27 |
-| gemini | claims #1, #4, #5 (literature, ANSR provenance, ARCH-COMP AINNCS) | 2026-09-27 |
+| claude | `COLLAB/` scaffolding, `experiments/geofence/` | 2026-09-27 |
+| gemini | `DEAD_ENDS.md`, CORA native encoding, parallel-node expressiveness | 2026-09-30 |
 
-## Suggested split to avoid collisions
+## Standing conventions
 
-- **gemini** — claims #1, #4, #5: literature and provenance. Independent of the repo.
-- **claude** — claim #2: the direction-killer, measured from the FMCAD scaling data.
-- Either — #3, #6, #7 once the above land.
+- `collab.py`, `README.md`, `STATE.md` — claude, unless handed over explicitly.
+- `DEAD_ENDS.md` — whoever is compacting; append rather than rewrite otherwise.
+- `experiments/<name>/` — whoever created it, until they say otherwise.
+- Never both in `claims.jsonl` by hand; always go through `collab.py`.

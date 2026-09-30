@@ -18,7 +18,12 @@ Usage:
     ./collab.py verify <agent> <id> "<what you did to confirm>"
     ./collab.py refute <agent> <id> "<what you found instead>"
     ./collab.py status [--all]
+    ./collab.py show   <id>
     ./collab.py log [-n N]
+
+Start at STATE.md for where the project is, and DEAD_ENDS.md for what has
+already been tried and closed. This file is the machinery; those two are the
+memory.
 """
 
 from __future__ import annotations
@@ -33,6 +38,12 @@ ROOT = Path(__file__).resolve().parent
 LOG = ROOT / "LOG.md"
 CLAIMS = ROOT / "claims.jsonl"
 AGENTS = ("claude", "gemini", "luke")
+
+
+def _summary(text: str, width: int = 140) -> str:
+    """First sentence or so, enough to scan the log without opening a claim."""
+    flat = " ".join(text.split())
+    return flat if len(flat) <= width else flat[:width].rsplit(" ", 1)[0] + "..."
 
 
 def _now() -> str:
@@ -97,14 +108,25 @@ def post(agent: str, message: str) -> None:
     print(f"posted to {LOG.name}")
 
 
+def _note(agent: str, line: str) -> None:
+    """One-line pointer in the log; the full text stays in the ledger.
+
+    Writing claims into LOG.md in full duplicated the ledger word for word and
+    grew the file to 204 KB, of which 88 percent was a second copy of
+    claims.jsonl. The log is now the discussion only, and `status` or `show`
+    is how you read a claim.
+    """
+    _append(LOG, f"\n## [{agent}] {_now()}\n\n{line}\n")
+
+
 def claim(agent: str, statement: str, evidence: str) -> None:
     """Register a new claim as unverified and announce it in the log."""
     ledger = Ledger.load()
     claim_id = ledger.next_id()
     ledger.record({"kind": "claim", "id": claim_id, "agent": agent, "when": _now(),
                    "statement": statement, "evidence": evidence})
-    post(agent, f"**CLAIM #{claim_id}** (unverified): {statement}"
-                + (f"\n\n_How to check:_ {evidence}" if evidence else ""))
+    _note(agent, f"**CLAIM #{claim_id}** (unverified) — "
+                 f"{_summary(statement)}  `./collab.py show {claim_id}`")
     print(f"claim #{claim_id} recorded as unverified")
 
 
@@ -120,8 +142,8 @@ def judge(agent: str, claim_id: int, note: str, kind: str) -> None:
         )
     ledger.record({"kind": kind, "id": claim_id, "agent": agent,
                    "when": _now(), "note": note})
-    post(agent, f"**{kind.upper()} #{claim_id}**: {note}\n\n"
-                f"_Claim was:_ {state[claim_id]['statement']}")
+    _note(agent, f"**{kind.upper()} #{claim_id}** — {_summary(note)}  "
+                 f"`./collab.py show {claim_id}`")
     print(f"claim #{claim_id} marked {kind}d by {agent}")
 
 
@@ -145,6 +167,20 @@ def status(show_all: bool) -> None:
     print(f"\n{pending} unverified of {len(state)}")
 
 
+def show(claim_id: int) -> None:
+    """Print one claim in full: statement, evidence, and every check on it."""
+    state = Ledger.load().fold()
+    entry = state.get(claim_id)
+    if entry is None:
+        raise SystemExit(f"no claim #{claim_id}")
+    print(f"#{claim_id} ({entry['author']}, {entry['status']})\n")
+    print(entry["statement"])
+    if entry["evidence"]:
+        print(f"\nhow to check: {entry['evidence']}")
+    for check in entry["checks"]:
+        print(f"\n{check}")
+
+
 def main() -> None:
     """Parse arguments and dispatch."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -163,6 +199,8 @@ def main() -> None:
         judger.add_argument("note")
     reporter = sub.add_parser("status")
     reporter.add_argument("--all", action="store_true")
+    shower = sub.add_parser("show")
+    shower.add_argument("id", type=int)
     tailer = sub.add_parser("log")
     tailer.add_argument("-n", type=int, default=40)
     args = parser.parse_args()
@@ -175,6 +213,8 @@ def main() -> None:
         judge(args.agent, args.id, args.note, args.command)
     elif args.command == "status":
         status(args.all)
+    elif args.command == "show":
+        show(args.id)
     elif args.command == "log":
         print("\n".join(LOG.read_text(encoding="utf-8").splitlines()[-args.n:])
               if LOG.exists() else "(empty)")
