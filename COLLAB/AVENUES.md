@@ -100,7 +100,7 @@ work; March–August reconstructed by Gemini from the reports and cross-checked.
 grant, not a venue. (ANSR-derived examples *did* reach NFM 2024, but as the
 `ANSR_no_net_*` variants, i.e. with the networks removed.)
 
-Ranking every **published** `.tree` containing a `NEURAL` node by BT structure:
+Ranking every **submitted** `.tree` containing a `NEURAL` node by BT structure (see the correction below — folders are submissions, not acceptances):
 
 | composites | networks | benchmark |
 |---|---|---|
@@ -124,3 +124,52 @@ So the remaining gap is not "find a better benchmark." It is that **no published
 NSBT benchmark has continuous state** — the field does not have one. Which makes
 proposing that benchmark a contribution in its own right, rather than a
 prerequisite we are missing.
+
+
+---
+
+## Correction: `REPRODUCIBILITY/` folders are SUBMISSIONS, not acceptances
+
+Luke checked the NFM 2024 proceedings: **BehaVerify was not accepted.** So every
+use of "published" above should read "submitted." The venues CLAUDE.md confirms
+as actually published are only four:
+
+- **NeuS 2025** — Neuro-Symbolic Behavior Trees and Their Verification
+- **FMAS 2024** ×2 — Formalizing Stateful BTs; BTs with Contingency Monitors
+- **SEFM 2022** — BehaVerify
+
+Everything else — `2023_SEFM`, `2024_ANSR`, `2024_ATVA`, `2024_NFM`,
+`2024_SEFM`, `2025_CAV`, `2025_FMCAD`, `2026_ATVA`, `2026_FM` — is a submission
+folder of unknown outcome.
+
+**So the only confirmed-published neural benchmarks are the 2025_NEUS ones:**
+the `acasxu` family (6 composites, 5 networks) and grid world (2 composites,
+1 network). Both are benchmarks compositional already wins on.
+
+## The successor search: `droneNew.tree`
+
+| | composites | neural | spatial state |
+|---|---|---|---|
+| `ANSR_no_net_5` (2024_NFM, rejected) | 10 | 0 | — |
+| **`droneNew`** (2025_FMCAD → 2026_ATVA → 2026_FM) | **19** | 0 | `INT` |
+
+`droneNew` is the most structured tree in the repository and an actively
+maintained lineage, carried across three successive submissions. Its domain is a
+real drone mission — `droneStatus`, `camStatus`, `battery {good, low,
+critical}`, `move {none, land, takeoff, fly}`, a waypoint index, and spatial
+state `x_a, y_a ∈ [−30,30]`, `z_a ∈ [0,80]`.
+
+It has **zero neural nodes** and **integer** spatial state.
+
+So the artifact that does not exist is precisely: **`droneNew` + a learned
+controller + `REAL` coordinates.** Three of the four ingredients are already
+built and already submitted; what is missing is the network and the type change
+— and `dsl_with_abstract_control_to_nuxmv.py` exists to handle exactly that
+type change.
+
+## What this does to the "build a benchmark" question
+
+It stops being "author a benchmark from nothing," which is a large and risky
+thing for a first-year, and becomes "add a learned controller to a drone mission
+BT the group has already built, submitted three times, and can hand to BT2Fiacre
+and BT2BIP in its existing network-free form."
