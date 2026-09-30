@@ -38,18 +38,19 @@ NUXMV = "REPRODUCIBILITY/2026_TBA/nuXmv_DL/bin/nuXmv"
 CONTROL = "accel_stage_0"
 
 
-def generate(out_dir):
+def generate(out_dir, tree=None):
     """Run the BehaVerify front end and return the generated SMV path.
 
     The directory is cleared first: a previous run leaves its PATCHED model
     here too, and globbing would otherwise pick that up and try to free an
     already-freed control.
     """
+    tree = tree or TREE
     shutil.rmtree(out_dir, ignore_errors=True)
-    subprocess.run([sys.executable, "-m", "behaverify", "nuxmv", str(TREE),
+    subprocess.run([sys.executable, "-m", "behaverify", "nuxmv", str(tree),
                     str(out_dir), "--generate", "--overwrite"],
                    capture_output=True, text=True, check=True)
-    return next(pathlib.Path(out_dir).rglob(f"{TREE.stem}.smv"))
+    return next(pathlib.Path(out_dir).rglob(f"{tree.stem}.smv"))
 
 
 # a cell's upper edge is pulled in by this much so adjacent regions do not
@@ -82,12 +83,10 @@ def contracts_from_crown(grid):
 
 def main():
     """Generate, patch, and report what the pipeline produced."""
-    global TREE                                       # noqa: PLW0603
     grid = int(sys.argv[1]) if len(sys.argv) > 1 else 8
-    if len(sys.argv) > 2:
-        TREE = HERE / sys.argv[2]
-    out = pathlib.Path(f"/tmp/bv_{TREE.stem}")
-    smv_path = generate(out)
+    tree = HERE / sys.argv[2] if len(sys.argv) > 2 else TREE
+    out = pathlib.Path(f"/tmp/bv_{tree.stem}")
+    smv_path = generate(out, tree)
     smv = smv_path.read_text()
     print(f"BehaVerify generated {smv_path.name}: {len(smv.splitlines())} lines")
     reals = sorted({line.split(":")[0].strip()
@@ -103,7 +102,7 @@ def main():
           f"{len(clashes)} inconsistent pairs")
 
     patched = patcher.patch(smv, CONTROL, contracts)
-    dest = out.parent / f"{TREE.stem}_contracts.smv"
+    dest = out.parent / f"{tree.stem}_contracts.smv"
     dest.write_text(patched)
     print(f"  patched model        : {dest} "
           f"({len(patched.splitlines())} lines)")

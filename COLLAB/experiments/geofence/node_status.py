@@ -78,7 +78,7 @@ def main():
     cells = crown_cells(GRID)
     print(f"'Brake never active for N consecutive ticks', {steps} steps, "
           f"{len(cells)} contracts")
-    print(f"  true system's longest Brake run over the envelope: 18 ticks\n")
+    print("  true system's longest Brake run over the envelope: 18 ticks\n")
     print(f"{'N':>4} {'verdict':>10} {'means':>34} {'time':>7}")
     for bound in (12, 16, 19, 22):
         res, secs = check_recovery(cells, steps, bound)

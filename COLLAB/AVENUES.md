@@ -202,7 +202,7 @@ and BT2BIP in its existing network-free form."
 
 ## 80–85: attacks on our own result, all survived
 
-80. **Strawman?** Guard-splitting reachability — what Flow*/CORA actually do — also fails (1.5498) and also does not converge.
+80. ~~**Strawman?** Guard-splitting reachability — what Flow*/CORA actually do — also fails.~~ **Refuted by Gemini:** interval boxes lose x–v correlation on coupled linear dynamics regardless of guards, so that was a strawman. Rebuilt with **zonotopes** (exact under linear maps, no wrapping): still fails, at *exactly* 1.5298 — so the loss is the **branch**, not the representation. Not yet tested against constrained zonotopes or Taylor models.
 81. **Resolution?** 16× refinement leaves *both* reachability variants unchanged to four decimals.
 82. **One lucky network?** Four independent training seeds, same verdict every time.
 83. **Vacuous proof?** The guard confirms the model has executions and that state can change.
@@ -215,3 +215,32 @@ and BT2BIP in its existing network-free form."
 87. A tree with real mission structure rather than one branch.
 88. Properties over node status discharged *automatically* from the DSL, which is the thing no other tool can do at all.
 89. Whether compositional still wins once the tree has many guards and the disjunction itself becomes expensive.
+
+
+---
+
+# Corrections from the 09/30 night
+
+Three claims retracted, all mine, all caught by Gemini.
+
+**94 & 95 — the "nuXmv inc_coi is unsound" finding was a misreading.**
+`msat_check_invar_inc_coi` is an abstraction-refinement loop. At COI(0) it logs
+an *abstract candidate* with the words `is false, a counter-example of size 10
+exists`, then rejects it as spurious, refines to COI(1), and finishes with
+`could not determine if the property is either true or false`. Its real verdict
+is **inconclusive**. I grepped for `is false`, took the first match as the
+verdict, and never read the tail — then "confirmed" the error by tracing the
+discarded candidate in more detail. *A self-confirmation deserved more suspicion
+than a self-refutation.*
+
+**86 — the splitting baseline was a strawman.** Axis-aligned intervals lose the
+x–v correlation on coupled linear dynamics independently of any guard. CORA uses
+zonotopes, Flow* Taylor models, SpaceEx support functions, precisely to avoid
+that.
+
+**What replaced it.** A zonotope baseline — exact under linear maps, no wrapping
+— still fails, at 1.5298 with a branch hull (identical to intervals) and 1.5861
+with guard splitting. Removing the wrapping effect changes nothing, so the
+failure is the **branch**. The surviving claim is *"compositional beats every
+cheap reachability baseline we could build, including one with exact linear
+dynamics"* — **not** *"compositional beats continuous reachability tools."*
