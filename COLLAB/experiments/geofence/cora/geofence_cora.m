@@ -85,8 +85,8 @@ function pieces = split_at(S, fence)
     left  = S & polytope([1 0], fence);      % x <= fence
     right = S & polytope([-1 0], -fence);    % x >= fence
     pieces = {};
-    if ~representsa(left, 'emptySet', 1e-12),  pieces{end+1} = left;  end
-    if ~representsa(right, 'emptySet', 1e-12), pieces{end+1} = right; end
+    if ~representsa_(left, 'emptySet', 1e-12),  pieces{end+1} = left;  end
+    if ~representsa_(right, 'emptySet', 1e-12), pieces{end+1} = right; end
     if isempty(pieces), pieces = {S}; end
 end
 

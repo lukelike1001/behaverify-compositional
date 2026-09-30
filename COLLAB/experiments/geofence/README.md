@@ -131,7 +131,37 @@ Removing the wrapping effect entirely changes the answer by **nothing** (1.5298
 either way). So the baseline's failure is caused by the **branch**, not by the
 set representation — which is the claim worth making, and it is now measured.
 
-**What this still does not establish.** The zonotope guard-split re-fits an
+### CORA itself
+
+MATLAB R2025b with the Optimization Toolbox and CORA v2026.1.0 unblocks the
+constrained-zonotope operations. Capability verified first: on a set where x and
+v are perfectly correlated, `S & polytope([1 0], 0)` gives `v <= 0.00` where a
+box would still say `v <= 1.00`.
+
+| configuration | CORA verdict | max x | sets |
+|---|---|---|---|
+| 144 contracts, 20 steps | **violated** at step 8 | 1.5498 | 13 |
+| 576 contracts | **violated** | 1.5497 | 13 |
+| 2,304 contracts | **violated** | 1.5497 | 13 |
+| \|v₀\| ≤ 1.0 (margin 0.049) | **violated** at step 6 | 1.5299 | 5 |
+| 40 steps | **violated** | 1.5498 | 13 |
+
+**CORA fails at every grid resolution, every envelope and every horizon, and
+does not converge under 16× refinement.** Compositional Z3 proves the same
+property with the same contracts.
+
+And CORA's numbers match `conzono.py` **exactly** — 1.5498/13 sets at base,
+1.5497 at both refinements. Two independent implementations of constrained
+zonotopes, one ours and one the reference tool, agreeing to four decimals. That
+validates our implementation and raises the claim's ceiling from *"every
+baseline we can build"* to **"CORA itself."**
+
+*Remaining caveat:* our script drives CORA's set operations manually rather than
+using its `hybridAutomaton` `reach()`. A native hybrid-automaton encoding with
+CORA's own guard-intersection and order-reduction heuristics might do better —
+that is the one way this could still turn around.
+
+**What the earlier zonotope note does not establish.** The zonotope guard-split re-fits an
 *axis-aligned* zonotope to each piece, because a zonotope is not closed under
 halfspace intersection. A tool using **constrained zonotopes** (CORA) or Taylor
 models with domain contraction (Flow*) preserves correlation through the cut and
