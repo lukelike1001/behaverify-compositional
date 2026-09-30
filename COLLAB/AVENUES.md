@@ -87,5 +87,40 @@ work; March–August reconstructed by Gemini from the reports and cross-checked.
 59. Pairing CROWN bounds with a dedicated reachability engine (CORA, Flow*, JuliaReach) instead of an SMT solver.
 60. Applying CEGAR splitting to the **plant** approximation rather than the network, or changing coordinates to linearise it.
 61. Region-merging grid world's progress contracts into boxes to cut the 3,596 CROWN calls below monolithic cost.
-62. Benchmarking on a discrete domain with **deep** BT structure, e.g. ANSR_ONNX's 10 composites, where monolithic BDDs should blow up first.
+62. ~~Benchmarking on ANSR_ONNX's 10 composites~~ — **dead**: ANSR_ONNX is in no reproducibility folder, so it is an unpublished artifact of a DARPA grant.
 63. Barrier certificates or invariant clusters, to get infinite-horizon properties without a bounded k.
+
+
+---
+
+## Correction to #62, and what it implies
+
+`ANSR_ONNX` appears in **no** `REPRODUCIBILITY/` folder — it lives only in
+`examples/`, making it an unpublished internal artifact. DARPA ANSR is a funding
+grant, not a venue. (ANSR-derived examples *did* reach NFM 2024, but as the
+`ANSR_no_net_*` variants, i.e. with the networks removed.)
+
+Ranking every **published** `.tree` containing a `NEURAL` node by BT structure:
+
+| composites | networks | benchmark |
+|---|---|---|
+| **6** | **5** | `2025_NEUS/acasxu_*` |
+| 3 | 1 | `2024_FMAS_BTM/template_network` |
+| 2 | 1 | `2026_FM/using1000`, `using9995` |
+| 2 | 1 | `2025_NEUS/grid_world_big` |
+
+Two consequences.
+
+**First, grid world is published too** — `grid_world_big.tree`,
+`template_fake_network_SCALE.tree` and `counter_1/2.tree` are all in
+`REPRODUCIBILITY/2025_NEUS`, alongside the ACAS family.
+
+**Second, and more important: the two benchmarks where compositional already
+wins are the two most structured published neural benchmarks that exist here.**
+ACAS Xu (~6× faster, ~11× less memory, one contract) and grid world (safety and
+liveness, 0.33 s). There is nowhere more structured to move to.
+
+So the remaining gap is not "find a better benchmark." It is that **no published
+NSBT benchmark has continuous state** — the field does not have one. Which makes
+proposing that benchmark a contribution in its own right, rather than a
+prerequisite we are missing.
