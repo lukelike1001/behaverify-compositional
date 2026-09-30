@@ -201,6 +201,45 @@ the acceleration — not of one set of weights.
 | the envelope was chosen to fit | derived after the first choice made the property *false*; matches braking physics |
 | the horizon is too short | true worst case at step 11; 20- and 40-step proofs both succeed |
 
+## Scaling: does it survive many guards?
+
+The pilot has one branch. Its advantage comes from keeping that branch as a
+disjunction — but a disjunction over many guards is what makes SMT expensive,
+while splitting over many guards is what makes flowpipe tools fragment. Both
+sides get worse; the question is which gets worse faster.
+
+Scaling to a priority ladder of N fences, each with its own braking level — how
+a real layered envelope (geofence, ceiling, velocity limit, battery) is written
+as a BT — and checking the **true** system for each ladder first:
+
+| guards | true system | splitting | peak sets | compositional | time |
+|---|---|---|---|---|---|
+| 1 | **unsafe** 1.7400 | violated ✓ | 484 | **violated** ✓ | 1.9 s |
+| 2 | safe 1.3520 | violated ✗ | 2,112 | **safe** ✓ | 8.5 s |
+| 3 | safe 1.3050 | violated ✗ | 12,367 | **safe** ✓ | 11.9 s |
+| 4 | safe 1.2900 | violated ✗ | 28,631 | **safe** ✓ | 10.3 s |
+| 6 | safe 1.2876 | violated ✗ | 134,902 | **safe** ✓ | 17.8 s |
+
+**Compositional is correct on all five.** Splitting says *violated* at every N,
+so it is right only on the one case where the property is genuinely false, and
+spurious on the other four — it never proves anything.
+
+Two things this settles:
+
+1. **The encoding is not trivially proving everything.** At N=1 the true system
+   really is unsafe (that ladder's only brake is −0.4), and compositional
+   correctly reports the violation. That is the soundness signal worth having,
+   and it only appeared because the true system was checked per ladder.
+2. **The scaling favours compositional.** Splitting's set count explodes 484 →
+   134,902 (≈280×) from 1 to 6 guards — the flowpipe fragmentation predicted in
+   claim #25. Compositional grows 1.9 s → 17.8 s, roughly 9× for 6× the guards,
+   sub-quadratic and non-monotone.
+
+*Caveat:* the splitting implementation merges only exactly-duplicate boxes, so a
+tool that merges overlapping or adjacent sets would fragment more slowly. The
+280× is an upper bound for a naive set representation, not a measurement of CORA
+or Flow*.
+
 ## What this is and is not
 
 **Is:** a pilot. One tree, one branch, one network, two continuous variables. It
