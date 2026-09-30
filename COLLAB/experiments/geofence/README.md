@@ -240,6 +240,48 @@ tool that merges overlapping or adjacent sets would fragment more slowly. The
 280× is an upper bound for a naive set representation, not a measurement of CORA
 or Flow*.
 
+## Through the actual BehaVerify pipeline
+
+Every NAV experiment wrote SMV by hand from the ONNX, so *"compositional
+BehaVerify on NAV"* never went through BehaVerify (claim #71). This pilot closes
+that loop:
+
+```
+geofence.tree
+  --> BehaVerify DSL front end
+        100-line SMV: x, v, accel all declared `real`;
+        OutsideFence_module(x_stage_0);
+        composite_sequence_without_memory_2; composite_selector_without_memory_2
+  --> dsl_with_abstract_control_to_nuxmv
+        control freed, 65 CROWN contracts injected, 0 inconsistent pairs
+  --> nuXmv
+```
+
+Nothing about the tree structure is hand-encoded — it comes from the DSL.
+
+**Two tools earned their keep here.**
+
+`check_consistency` refused to inject, which exposed that corner-touching closed
+cells pin the control to a single value. **My hand-written Z3 encoding had the
+same bug.** Fixed with half-open cells; the headline survives and runs 2.7×
+faster, because the spurious corner constraints were making the problem harder
+rather than producing a false proof.
+
+Then nuXmv immediately falsified the invariant — freeing the control leaves it
+*unconstrained outside the grid*. The network's `tanh` bounds it to [−1, 1]
+everywhere, a free structural fact that has to be stated. Added as a
+region-free contract, BMC then finds no counterexample to depth 25.
+
+**Limitations, stated plainly.** `FROZENVAR` ranges in the DSL are integer-only,
+so a continuous initial *set* is not expressible in a `.tree`; the BehaVerify
+path therefore verifies from the single point (0, 0) while the Z3 path verifies
+from the box. The headline comparison rests on the **Z3** path; the BehaVerify
+path shows the integration works. Those are separate claims.
+
+The two encodings agree where they overlap: pinned to the same single-point
+initial state, Z3 proves safe in **1.9 s** — while nuXmv's `check_invar_ic3` on
+the same property ran past ten minutes without terminating.
+
 ## What this is and is not
 
 **Is:** a pilot. One tree, one branch, one network, two continuous variables. It
