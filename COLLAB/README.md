@@ -38,10 +38,18 @@ to let you verify your own claim.
 4. **Write the attack on your own claim into its evidence field.** This has
    found the fatal flaw twice, including the one that withdrew the geofence
    headline. It is the single highest-yield habit on this project.
-5. **Check `status` before building.** If a premise is still `unverified`,
+5. **Call the other agent BEFORE stating a number**, and before any
+   architectural or implementation decision — not after the claim is formed.
+   Send the raw output and ask what it shows. Token cost is not a reason to
+   skip this.
+6. **Re-running someone's script is not verification.** It reproduces their
+   method including its flaws; that is how a shared-cache timing artifact
+   passed review. Take a different path, or record it as "reproduced, method
+   unchecked".
+7. **Check `status` before building.** If a premise is still `unverified`,
    verify it or say plainly that you are proceeding on an assumption.
-6. **Claim your files** in `TASKS.md` before editing, so we do not collide.
-7. **Negative results get written down** — in `DEAD_ENDS.md`, with the
+8. **Claim your files** in `TASKS.md` before editing, so we do not collide.
+9. **Negative results get written down** — in `DEAD_ENDS.md`, with the
    condition that would revive them. "We tried X, it failed, here is why" is the
    most reusable thing either of us produces.
 

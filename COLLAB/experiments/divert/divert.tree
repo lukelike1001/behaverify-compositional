@@ -1,0 +1,215 @@
+#{
+    The divert benchmark as a BehaVerify DSL behavior tree.
+
+    Tree Architecture:
+      Root selector
+        |-- Recovery sequence with_partial_memory
+        |     |-- HazardMonitor parallel policy success_on_one
+        |     |     |-- OutOfBounds?   |x| >= 2.4 or |y| >= 1.1 or (x >= 0.8 and |y| <= 0.7)
+        |     |     |-- TooFast?       vx^2 + vy^2 >= 1.0
+        |     |     +-- Stuck?         progress_timer >= 25
+        |     +-- DivertProcedure sequence with_partial_memory
+        |           |-- Brake          ax, ay := -2.0; returns success when brake_timer >= 5
+        |           +-- Return         ax, ay free (net_divert); returns success when return_timer >= 18
+        +-- NeuralCruise               ax, ay free (net_cruise); runs nominal cruise
+
+    DSL FINDINGS AND WORKAROUNDS:
+    1. NEURAL INPUT TYPE RESTRICTION (check_grammar.py:643):
+       BehaVerify's DSL check_grammar.py:643 strictly enforces that neural network
+       input variables must have atom_type == 'INT'. Continuous state variables
+       (x, y, vx, vy) of type REAL are rejected with BTreeException.
+       WORKAROUND: In accordance with geofence.tree, control accelerations (ax, ay)
+       are declared as plain blackboard REAL variables initialized to 0. They are
+       freed and constrained post-generation by CROWN contract injection via
+       dsl_with_abstract_control_to_nuxmv.py.
+
+    2. PARALLEL POLICY WITH MEMORY FORBIDDEN (check_grammar.py:779-780):
+       The benchmark specification drafted HazardMonitor as:
+       'parallel policy success_on_one with_partial_memory'.
+       However, check_grammar.py:779-780 raises BTreeException:
+       'Node HazardMonitor is success_on_one and has memory. This combination does not make sense.'
+       (and check_grammar.py:776 rejects 'with_true_memory' as not yet implemented).
+       WORKAROUND: HazardMonitor is declared as 'parallel policy success_on_one' without memory.
+       Latching across ticks is achieved structurally by the parent 'Recovery' composite,
+       which is a 'sequence with_partial_memory': once HazardMonitor succeeds at tick k,
+       the sequence advances to child 1 (DivertProcedure) and partial memory ensures
+       DivertProcedure resumes on subsequent ticks without re-evaluating HazardMonitor.
+
+    3. ACTION NODE ENVIRONMENT SCOPE RESTRICTION (check_grammar.py:529, 616):
+       Action nodes in BehaVerify cannot read 'environment' variables in variable
+       assignments or return_statement conditions (scopes restricted to local and blackboard).
+       WORKAROUND: Physical state (x, y, vx, vy) is evaluated by environment_check nodes
+       (OutOfBounds, TooFast) in HazardMonitor. Action nodes maintain discrete phase
+       counters on the blackboard (brake_timer, return_timer, progress_timer) to signal
+       completion transitions to the sequence with partial memory.
+}#
+
+configuration {
+    use_reals
+}
+enumerations {}
+constants {}
+variables {
+    variable { env x VAR REAL assign { result { 0 } } }
+    variable { env y VAR REAL assign { result { 0 } } }
+    variable { env vx VAR REAL assign { result { 0 } } }
+    variable { env vy VAR REAL assign { result { 0 } } }
+    variable { bl ax VAR REAL assign { result { 0 } } }
+    variable { bl ay VAR REAL assign { result { 0 } } }
+    variable { bl progress_timer VAR INT assign { result { 0 } } }
+    variable { bl brake_timer VAR INT assign { result { 0 } } }
+    variable { bl return_timer VAR INT assign { result { 0 } } }
+}
+environment_update {
+    variable_statement {
+        x
+        assign { result { (add, x, (mult, 0.1, vx)) } }
+    }
+    variable_statement {
+        y
+        assign { result { (add, y, (mult, 0.1, vy)) } }
+    }
+    variable_statement {
+        vx
+        assign { result { (add, vx, (mult, 0.1, (sub, ax, (mult, 0.1, vx)))) } }
+    }
+    variable_statement {
+        vy
+        assign { result { (add, vy, (mult, 0.1, (sub, ay, (mult, 0.1, vy)))) } }
+    }
+}
+checks {
+    check {
+        Stuck
+        arguments {}
+        read_variables { progress_timer }
+        condition { (gte, progress_timer, 25) }
+    }
+}
+environment_checks {
+    environment_check {
+        OutOfBounds
+        arguments {}
+        read_variables {}
+        condition {
+            (or,
+                (gte, (abs, x), 2.4),
+                (gte, (abs, y), 1.1),
+                (and, (gte, x, 0.8), (and, (gte, y, -0.7), (lte, y, 0.7)))
+            )
+        }
+    }
+    environment_check {
+        TooFast
+        arguments {}
+        read_variables {}
+        condition {
+            (gte, (add, (mult, vx, vx), (mult, vy, vy)), 1.0)
+        }
+    }
+}
+actions {
+    action {
+        Brake
+        arguments {}
+        local_variables {}
+        read_variables { brake_timer }
+        write_variables { ax, ay, brake_timer, progress_timer }
+        initial_values {}
+        update {
+            variable_statement {
+                ax
+                assign { result { -2.0 } }
+            }
+            variable_statement {
+                ay
+                assign { result { 0.0 } }
+            }
+            variable_statement {
+                brake_timer
+                assign { result { (add, brake_timer, 1) } }
+            }
+            variable_statement {
+                progress_timer
+                assign { result { 0 } }
+            }
+            return_statement {
+                case { (gte, brake_timer, 5) }
+                result { success }
+                result { running }
+            }
+        }
+    }
+    action {
+        Return
+        arguments {}
+        local_variables {}
+        read_variables { return_timer }
+        write_variables { ax, ay, return_timer, progress_timer }
+        initial_values {}
+        update {
+            variable_statement {
+                return_timer
+                assign { result { (add, return_timer, 1) } }
+            }
+            variable_statement {
+                progress_timer
+                assign { result { 0 } }
+            }
+            return_statement {
+                case { (gte, return_timer, 18) }
+                result { success }
+                result { running }
+            }
+        }
+    }
+    action {
+        NeuralCruise
+        arguments {}
+        local_variables {}
+        read_variables { progress_timer }
+        write_variables { ax, ay, progress_timer }
+        initial_values {}
+        update {
+            variable_statement {
+                progress_timer
+                assign { result { (add, progress_timer, 1) } }
+            }
+            return_statement { result { running } }
+        }
+    }
+}
+sub_trees {}
+tree {
+    composite {
+        Root selector
+        children {
+            composite {
+                Recovery sequence with_partial_memory
+                children {
+                    composite {
+                        HazardMonitor parallel policy success_on_one
+                        children {
+                            OutOfBounds {}
+                            TooFast {}
+                            Stuck {}
+                        }
+                    }
+                    composite {
+                        DivertProcedure sequence with_partial_memory
+                        children {
+                            Brake {}
+                            Return {}
+                        }
+                    }
+                }
+            }
+            NeuralCruise {}
+        }
+    }
+}
+tick_prerequisite { True }
+specifications {
+    INVARSPEC { (not, (and, (gte, x, 1.2), (lte, x, 1.8), (gte, y, -0.5), (lte, y, 0.5))) }
+    INVARSPEC { (implies, (active, Recovery), (not, (and, (gte, x, 1.15), (lte, x, 1.85), (gte, y, -0.55), (lte, y, 0.55)))) }
+}
