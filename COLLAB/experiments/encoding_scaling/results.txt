@@ -1,0 +1,281 @@
+encoding scaling | 2026-10-05T06:05:06Z | host ubuntu
+=== table ===
+290
+Traceback (most recent call last):
+  File "/home/lnam/.local/lib/python3.10/site-packages/textx/model.py", line 337, in _parse
+    return self.parser_model.parse(self)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 300, in parse
+    result = self._parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 379, in _parse
+    result = e.parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 300, in parse
+    result = self._parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 379, in _parse
+    result = e.parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 798, in parse
+    result = self._parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 907, in _parse
+    parser._nm_raise(self, c_pos, parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 1731, in _nm_raise
+    raise self.nm
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 460, in _parse
+    result = [self.nodes[0].parse(parser)]
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 798, in parse
+    result = self._parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 907, in _parse
+    parser._nm_raise(self, c_pos, parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 1731, in _nm_raise
+    raise self.nm
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 460, in _parse
+    result = [self.nodes[0].parse(parser)]
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 798, in parse
+    result = self._parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 907, in _parse
+    parser._nm_raise(self, c_pos, parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 1731, in _nm_raise
+    raise self.nm
+arpeggio.NoMatch: Expected 'hypersafety' or 'use_reals' or '}' at position /home/lnam/VSCode/behaverify-compositional/REPRODUCIBILITY/2024_ANSR/examples/small/table.tree:(3, 12) => '   neural *{ 	fixed 	'.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/home/lnam/VSCode/behaverify-compositional/src/behaverify/__main__.py", line 3, in <module>
+    main()
+  File "/home/lnam/VSCode/behaverify-compositional/src/behaverify/behaverify.py", line 733, in main
+    dsl_to_nuxmv(metamodel_file, args.model_file, output_file, True, args.keep_last_stage, args.do_not_trim, args.behave_only, args.recursion_limit, False, args.no_checks, args.record_times, args.use_encoding)
+  File "/home/lnam/VSCode/behaverify-compositional/src/behaverify/dsl_to_nuxmv.py", line 2198, in dsl_to_nuxmv
+    (model, variables, constants, declared_enumerations) = validate_model(metamodel_file, model_file, recursion_limit, skip_grammar_check)
+  File "/home/lnam/VSCode/behaverify-compositional/src/behaverify/check_grammar.py", line 815, in validate_model
+    model = metamodel.model_from_file(model_file)
+  File "/home/lnam/.local/lib/python3.10/site-packages/textx/metamodel.py", line 744, in model_from_file
+    return self.internal_model_from_file(
+  File "/home/lnam/.local/lib/python3.10/site-packages/textx/metamodel.py", line 800, in internal_model_from_file
+    model = self._parser_blueprint.clone().get_model_from_str(
+  File "/home/lnam/.local/lib/python3.10/site-packages/textx/model.py", line 397, in get_model_from_str
+    self.parse(model_str, file_name=file_name)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 1525, in parse
+    self.parse_tree = self._parse()
+  File "/home/lnam/.local/lib/python3.10/site-packages/textx/model.py", line 340, in _parse
+    raise TextXSyntaxError(
+textx.exceptions.TextXSyntaxError: /home/lnam/VSCode/behaverify-compositional/REPRODUCIBILITY/2024_ANSR/examples/small/table.tree:3:12: Expected 'hypersafety' or 'use_reals' or '}' => '   neural *{ 	fixed 	'
+/home/lnam/VSCode/behaverify-compositional/src/behaverify/data/metamodel/behaverify.tx
+Command exited with non-zero status 1
+	Command being timed: "python -m behaverify nuxmv REPRODUCIBILITY/2024_ANSR/examples/small/table.tree /tmp/enc_table --generate --overwrite --recursion_limit 20000"
+	User time (seconds): 1.63
+	System time (seconds): 0.08
+	Percent of CPU this job got: 195%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.87
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 74824
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 8
+	Minor (reclaiming a frame) page faults: 11177
+	Voluntary context switches: 186
+	Involuntary context switches: 281
+	Swaps: 0
+	File system inputs: 4768
+	File system outputs: 8
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 1
+--- smv size ---
+total 44
+drwxrwxr-x  3 lnam lnam  4096 Oct  5 01:05 .
+drwxrwxrwt 37 root root 36864 Oct  5 01:05 ..
+drwxrwxr-x  2 lnam lnam  4096 Oct  5 01:05 nuxmv
+=== fixed ===
+289
+Traceback (most recent call last):
+  File "/home/lnam/.local/lib/python3.10/site-packages/textx/model.py", line 337, in _parse
+    return self.parser_model.parse(self)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 300, in parse
+    result = self._parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 379, in _parse
+    result = e.parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 300, in parse
+    result = self._parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 379, in _parse
+    result = e.parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 798, in parse
+    result = self._parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 907, in _parse
+    parser._nm_raise(self, c_pos, parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 1731, in _nm_raise
+    raise self.nm
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 460, in _parse
+    result = [self.nodes[0].parse(parser)]
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 798, in parse
+    result = self._parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 907, in _parse
+    parser._nm_raise(self, c_pos, parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 1731, in _nm_raise
+    raise self.nm
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 460, in _parse
+    result = [self.nodes[0].parse(parser)]
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 798, in parse
+    result = self._parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 907, in _parse
+    parser._nm_raise(self, c_pos, parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 1731, in _nm_raise
+    raise self.nm
+arpeggio.NoMatch: Expected 'hypersafety' or 'use_reals' or '}' at position /home/lnam/VSCode/behaverify-compositional/REPRODUCIBILITY/2024_ANSR/examples/small/fixed.tree:(3, 12) => '   neural *{ 	fixed 	'.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/home/lnam/VSCode/behaverify-compositional/src/behaverify/__main__.py", line 3, in <module>
+    main()
+  File "/home/lnam/VSCode/behaverify-compositional/src/behaverify/behaverify.py", line 733, in main
+    dsl_to_nuxmv(metamodel_file, args.model_file, output_file, True, args.keep_last_stage, args.do_not_trim, args.behave_only, args.recursion_limit, False, args.no_checks, args.record_times, args.use_encoding)
+  File "/home/lnam/VSCode/behaverify-compositional/src/behaverify/dsl_to_nuxmv.py", line 2198, in dsl_to_nuxmv
+    (model, variables, constants, declared_enumerations) = validate_model(metamodel_file, model_file, recursion_limit, skip_grammar_check)
+  File "/home/lnam/VSCode/behaverify-compositional/src/behaverify/check_grammar.py", line 815, in validate_model
+    model = metamodel.model_from_file(model_file)
+  File "/home/lnam/.local/lib/python3.10/site-packages/textx/metamodel.py", line 744, in model_from_file
+    return self.internal_model_from_file(
+  File "/home/lnam/.local/lib/python3.10/site-packages/textx/metamodel.py", line 800, in internal_model_from_file
+    model = self._parser_blueprint.clone().get_model_from_str(
+  File "/home/lnam/.local/lib/python3.10/site-packages/textx/model.py", line 397, in get_model_from_str
+    self.parse(model_str, file_name=file_name)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 1525, in parse
+    self.parse_tree = self._parse()
+  File "/home/lnam/.local/lib/python3.10/site-packages/textx/model.py", line 340, in _parse
+    raise TextXSyntaxError(
+textx.exceptions.TextXSyntaxError: /home/lnam/VSCode/behaverify-compositional/REPRODUCIBILITY/2024_ANSR/examples/small/fixed.tree:3:12: Expected 'hypersafety' or 'use_reals' or '}' => '   neural *{ 	fixed 	'
+/home/lnam/VSCode/behaverify-compositional/src/behaverify/data/metamodel/behaverify.tx
+Command exited with non-zero status 1
+	Command being timed: "python -m behaverify nuxmv REPRODUCIBILITY/2024_ANSR/examples/small/fixed.tree /tmp/enc_fixed --generate --overwrite --recursion_limit 20000"
+	User time (seconds): 1.76
+	System time (seconds): 0.07
+	Percent of CPU this job got: 220%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.83
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 74572
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 11190
+	Voluntary context switches: 18
+	Involuntary context switches: 540
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 8
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 1
+--- smv size ---
+total 44
+drwxrwxr-x  3 lnam lnam  4096 Oct  5 01:05 .
+drwxrwxrwt 38 root root 36864 Oct  5 01:05 ..
+drwxrwxr-x  2 lnam lnam  4096 Oct  5 01:05 nuxmv
+=== float ===
+289
+Traceback (most recent call last):
+  File "/home/lnam/.local/lib/python3.10/site-packages/textx/model.py", line 337, in _parse
+    return self.parser_model.parse(self)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 300, in parse
+    result = self._parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 379, in _parse
+    result = e.parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 300, in parse
+    result = self._parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 379, in _parse
+    result = e.parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 798, in parse
+    result = self._parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 907, in _parse
+    parser._nm_raise(self, c_pos, parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 1731, in _nm_raise
+    raise self.nm
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 460, in _parse
+    result = [self.nodes[0].parse(parser)]
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 798, in parse
+    result = self._parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 907, in _parse
+    parser._nm_raise(self, c_pos, parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 1731, in _nm_raise
+    raise self.nm
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 460, in _parse
+    result = [self.nodes[0].parse(parser)]
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 798, in parse
+    result = self._parse(parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 907, in _parse
+    parser._nm_raise(self, c_pos, parser)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 1731, in _nm_raise
+    raise self.nm
+arpeggio.NoMatch: Expected 'hypersafety' or 'use_reals' or '}' at position /home/lnam/VSCode/behaverify-compositional/REPRODUCIBILITY/2024_ANSR/examples/small/float.tree:(3, 12) => '   neural *{ 	float 	'.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/home/lnam/VSCode/behaverify-compositional/src/behaverify/__main__.py", line 3, in <module>
+    main()
+  File "/home/lnam/VSCode/behaverify-compositional/src/behaverify/behaverify.py", line 733, in main
+    dsl_to_nuxmv(metamodel_file, args.model_file, output_file, True, args.keep_last_stage, args.do_not_trim, args.behave_only, args.recursion_limit, False, args.no_checks, args.record_times, args.use_encoding)
+  File "/home/lnam/VSCode/behaverify-compositional/src/behaverify/dsl_to_nuxmv.py", line 2198, in dsl_to_nuxmv
+    (model, variables, constants, declared_enumerations) = validate_model(metamodel_file, model_file, recursion_limit, skip_grammar_check)
+  File "/home/lnam/VSCode/behaverify-compositional/src/behaverify/check_grammar.py", line 815, in validate_model
+    model = metamodel.model_from_file(model_file)
+  File "/home/lnam/.local/lib/python3.10/site-packages/textx/metamodel.py", line 744, in model_from_file
+    return self.internal_model_from_file(
+  File "/home/lnam/.local/lib/python3.10/site-packages/textx/metamodel.py", line 800, in internal_model_from_file
+    model = self._parser_blueprint.clone().get_model_from_str(
+  File "/home/lnam/.local/lib/python3.10/site-packages/textx/model.py", line 397, in get_model_from_str
+    self.parse(model_str, file_name=file_name)
+  File "/home/lnam/.local/lib/python3.10/site-packages/arpeggio/__init__.py", line 1525, in parse
+    self.parse_tree = self._parse()
+  File "/home/lnam/.local/lib/python3.10/site-packages/textx/model.py", line 340, in _parse
+    raise TextXSyntaxError(
+textx.exceptions.TextXSyntaxError: /home/lnam/VSCode/behaverify-compositional/REPRODUCIBILITY/2024_ANSR/examples/small/float.tree:3:12: Expected 'hypersafety' or 'use_reals' or '}' => '   neural *{ 	float 	'
+/home/lnam/VSCode/behaverify-compositional/src/behaverify/data/metamodel/behaverify.tx
+Command exited with non-zero status 1
+	Command being timed: "python -m behaverify nuxmv REPRODUCIBILITY/2024_ANSR/examples/small/float.tree /tmp/enc_float --generate --overwrite --recursion_limit 20000"
+	User time (seconds): 1.72
+	System time (seconds): 0.08
+	Percent of CPU this job got: 198%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.90
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 74452
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 11188
+	Voluntary context switches: 19
+	Involuntary context switches: 316
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 8
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 1
+--- smv size ---
+total 44
+drwxrwxr-x  3 lnam lnam  4096 Oct  5 01:05 .
+drwxrwxrwt 39 root root 36864 Oct  5 01:05 ..
+drwxrwxr-x  2 lnam lnam  4096 Oct  5 01:05 nuxmv
+DONE
