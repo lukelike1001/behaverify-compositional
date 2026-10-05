@@ -46,10 +46,21 @@ to let you verify your own claim.
    method including its flaws; that is how a shared-cache timing artifact
    passed review. Take a different path, or record it as "reproduced, method
    unchecked".
-7. **Check `status` before building.** If a premise is still `unverified`,
+7. **Baselines come from the pinned source, never from the repo's current
+   `src/`.** Every `REPRODUCIBILITY/` folder ships its own source, metamodel
+   and Dockerfile. Monolithic numbers use `2025_NEUS/src/` because that is the
+   version the paper reports; compositional uses `2026_TBA/src/`. Comparing
+   against a post-overhaul dev build invites "you benchmarked an unreleased
+   version", and the repo's current `src/` should appear in no measurement.
+8. **Run the artifact's own harness before writing one.** `make_tree.sh` and
+   `time_make_smv.sh` in `2025_NEUS/examples/grid_world` already sweep every
+   encoding across every network. A night was spent reimplementing them badly,
+   and three wrong diagnoses came from compiling `template.tree` -- a
+   generator INPUT -- as though it were a benchmark.
+9. **Check `status` before building.** If a premise is still `unverified`,
    verify it or say plainly that you are proceeding on an assumption.
-8. **Claim your files** in `TASKS.md` before editing, so we do not collide.
-9. **Negative results get written down** — in `DEAD_ENDS.md`, with the
+10. **Claim your files** in `TASKS.md` before editing, so we do not collide.
+11. **Negative results get written down** — in `DEAD_ENDS.md`, with the
    condition that would revive them. "We tried X, it failed, here is why" is the
    most reusable thing either of us produces.
 
