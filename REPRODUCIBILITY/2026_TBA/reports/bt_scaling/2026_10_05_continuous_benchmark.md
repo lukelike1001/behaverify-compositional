@@ -61,12 +61,29 @@ Compositional BehaVerify does not compete with α,β-CROWN — it **consumes** i
 is the interface between layers 1 and 3, and it is agnostic to which network verifier fills
 layer 1. That is worth stating as a design property rather than hiding.
 
-**The property that matters is bounded progress**, not safety. *"Recovery completes within
-N ticks"* is *"the state leaves the recovery region in bounded time"* — the shape we have
-already proved tight to one tick (claim #93: refuted at N=12 and 16, proved at 19 and 22,
-against a true maximum of 18). Reachability tools compute where a system **can** go; they
-cannot establish that it **must** arrive, because that needs an under-approximation or a
-ranking argument and they have neither.
+**The property that matters is bounded progress** — *"Recovery completes within N ticks"* —
+the shape we have already proved tight to one tick (claim #93: refuted at N=12 and 16,
+proved at 19 and 22, against a true maximum of 18).
+
+**Two corrections, both from Gemini on 2026-10-05, that this report originally got wrong:**
+
+- **Bounded progress is a SAFETY property, not liveness.** `G(triggered → F_{≤N} completed)`
+  is negated by a finite prefix of length N+1, and every bounded-time property is a safety
+  property (Alpern & Schneider). Calling it liveness in front of a formal-methods reviewer
+  is a red flag. The genuine liveness result we hold is grid world's `AG AF goal`
+  (`2026_08_31_liveness_ctl.md`), which is unbounded — and discrete.
+- **Reachability CAN soundly establish "must arrive".** This report claimed it structurally
+  cannot; that was the sixth expressiveness-shaped claim of the week and it died like the
+  other five. At least four techniques do it: forward over-approximation with an absorbing
+  goal (if the over-approximated non-terminal set is empty at step N, every trajectory has
+  arrived); backward reachability and capture basins (Hamilton-Jacobi); viability kernels
+  and control barrier functions — which this very report cites in §7; and under-approximate
+  reachability via Kaucher interval arithmetic or Taylor models.
+
+So what actually defeats CORA on `divert` is **representation and scalability** — wrapping
+error and fragmentation when convex sets are split repeatedly across guards — **not a
+structural inability to prove progress.** That is a weaker and more honest claim, and it is
+a cost argument, which has died twice this week and must be measured rather than asserted.
 
 ## 4. What every alternative cannot do, measured
 
@@ -175,7 +192,24 @@ safe" in **0.149s**, perturbation-tested. *Kill: the guard does not fire on a po
 would likely need Bounded Model Checking, which weakens the guarantees"* — which is
 publishable and is not the result we want. Say so plainly rather than reframing.
 
-## 9. Rules this report follows
+## 9. Venue, honestly
+
+Gemini's read, which Luke should weigh before committing weeks:
+
+- **FMAS — strong contender.** Case studies, neuro-symbolic architectures and new
+  benchmarks are its scope. An end-to-end NSBT verification over continuous dynamics fits.
+- **FM, ATVA — reject.** Both want theoretical or algorithmic novelty. A paper whose stated
+  contribution is *"an existence proof with real tools, not new theory"* tells an ATVA PC it
+  is in the wrong room.
+- **ICRA / IROS / RA-L — reject in this form.** Robotics reviewers want physical experiments
+  or high-fidelity simulation, not SMT unrolling on an isolated plant.
+
+To reach a top formal-methods venue the contribution would have to be an **algorithmic**
+one — for instance, how BT priority and memory semantics enable a specialised compositional
+CEGAR loop that beats monolithic SMT or a general hybrid engine. That is a different and
+larger claim than this plan makes, and we do not have it.
+
+## 10. Rules this report follows
 
 Every figure above carries its benchmark and source. Baselines come from pinned sources
 (`2025_NEUS/src`, `2026_TBA/src`), never the repository's current `src/`, which is

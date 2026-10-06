@@ -115,22 +115,36 @@ def handover_box(n1):
     return tuple(bounds)
 
 
-def return_horizon(box, limit=30, source=None, region=REGION, timeout_s=900):
-    """Smallest n2 for which Lemma 2 closes from B1, with its CEGAR cost."""
-    for steps in range(6, limit + 1):
-        verdict, rounds, cells, secs = prove(
-            steps + 1, steps, rounds=200, timeout_s=timeout_s, region=region,
-            source=source, initial=box, handed=True, verbose=False)
-        print(f"  n2 = {steps:>3}  {verdict:>9}  {rounds:>3} rounds  "
-              f"{cells:>5} cells  {secs:7.1f}s", flush=True)
-        if verdict == "PROVED":
-            return steps, rounds, cells, secs
-    return None, None, None, None
+def return_horizon(box, source=None, limit=45, verbose=True):
+    """Lemma 2 by zonotope propagation. Returns (n2, seconds).
+
+    NOT by unrolled SMT, and not by interval reachability. Both were measured
+    and both fail, for reasons that do not overlap:
+      - unrolled SMT makes the solver choose WHICH contract cell applies at
+        EVERY tick, so the search grows like cells^horizon. It returns
+        `unknown` at 256 cells with a horizon of 6, and at 28 cells with a
+        horizon of 35 after 1,201s. Meanwhile CROWN's bound is only useful
+        below a half-width of about 0.06, which the Return corridor needs
+        roughly 10^4 cells to reach. The two numbers miss each other by three
+        orders of magnitude.
+      - interval reachability diverges on the wrapping effect: the closed loop
+        has complex eigenvalues of modulus 0.809 but ||A||_inf = 1.23, so the
+        boxes grow 1.23x a tick while the true set shrinks.
+    """
+    import time                                         # noqa: PLC0415
+    import zono                                         # noqa: PLC0415
+    from network import CrownContracts                  # noqa: PLC0415
+
+    started = time.time()
+    steps = zono.escape_horizon(zono.Zono.from_box(box, handed=True),
+                                source or CrownContracts(), limit=limit,
+                                verbose=verbose)
+    return steps, time.time() - started
 
 
 def main():
     """Both lemmas, then the composed bound, against the measured sweep."""
-    print("Lemma 1 (Brake): analytic, no contracts")
+    print("Lemma 1 (Brake): analytic, no contracts, Z3")
     n1 = brake_horizon()
     box = handover_box(n1)
     print(f"  n1 = {n1} ticks")
@@ -138,14 +152,13 @@ def main():
         f"{n} [{box[2 * d]:.4f}, {box[2 * d + 1]:.4f}]"
         for d, n in enumerate(AXES)))
     print("\nLemma 2 (Return): CROWN contracts over the trained net_divert")
-    import network                                      # noqa: PLC0415
-    n2, rounds, cells, secs = return_horizon(box, source=network.CrownContracts())
+    n2, secs = return_horizon(box)
     if n2 is None:
         print("\nLemma 2 did not close; the composed bound is not available.")
         return
+    print(f"  n2 = {n2} ticks  ({secs:.1f}s)")
     print(f"\nCOMPOSED  N = n1 + n2 = {n1} + {n2} = {n1 + n2} ticks")
-    print(f"measured longest recovery over 26,244 box starts: 31 ticks")
-    print(f"Lemma 2 cost {rounds} CEGAR rounds, {cells} cells, {secs:.1f}s")
+    print("measured longest recovery over 26,244 box starts: 31 ticks")
 
 
 if __name__ == "__main__":
