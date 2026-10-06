@@ -55,40 +55,52 @@ def recover(tree, x, y, vx, vy, steps=HORIZON):
     return trace
 
 
-def sweep(n=13, speeds=5):
-    """Dense sweep of the trip region at every heading, up to the speed limit."""
+def sweep(n=18, vel=9):
+    """Dense sweep of the trip region over the PER-AXIS VELOCITY BOX.
+
+    The box, not the speed circle. `verify.py` relaxes the circular speed limit
+    to |vx|, |vy| <= S_MAX because the circular form is nonlinear and drops Z3
+    into nlsat, so the encoded initial set reaches a speed of sqrt(2) * S_MAX.
+    Sweeping the circle instead measured a bound over a strict SUBSET of the
+    states the proof quantifies over, which would have let a true measured N
+    sit under a false proved one. Sweeping the box costs nothing and removes
+    the mismatch.
+    """
     tree = Tree()
     worst_gap, worst_at = np.inf, None
     longest, longest_at = 0, None
     incomplete = []
     for x in np.linspace(TRIP[0], TRIP[1], n):
         for y in np.linspace(TRIP[2], TRIP[3], n):
-            for speed in np.linspace(0.2, S_MAX, speeds):
-                for theta in np.linspace(0, 2 * np.pi, 8, endpoint=False):
-                    vx, vy = speed * np.cos(theta), speed * np.sin(theta)
-                    trace = recover(tree, float(x), float(y), vx, vy)
+            for vx in np.linspace(-S_MAX, S_MAX, vel):
+                for vy in np.linspace(-S_MAX, S_MAX, vel):
+                    trace = recover(tree, float(x), float(y), float(vx),
+                                    float(vy))
                     gap = min(obstacle_distance(s[0], s[1]) for s in trace)
                     ticks = sum(1 for s in trace if s[5])
                     if gap < worst_gap:
-                        worst_gap, worst_at = gap, (x, y, speed, theta)
+                        worst_gap, worst_at = gap, (x, y, vx, vy)
                     if ticks > longest:
-                        longest, longest_at = ticks, (x, y, speed, theta)
+                        longest, longest_at = ticks, (x, y, vx, vy)
                     if trace[-1][4] != "end" or ticks >= HORIZON:
-                        incomplete.append((x, y, speed, theta, ticks))
-    return worst_gap, worst_at, longest, longest_at, incomplete
+                        incomplete.append((x, y, vx, vy, ticks))
+    return worst_gap, worst_at, longest, longest_at, incomplete, n * n * vel * vel
 
 
 def main():
     """Report the measured bounds, and say plainly whether they are usable."""
-    print(f"divert envelope: trip region {TRIP}, speeds up to {S_MAX}, "
+    print(f"divert envelope: trip region {TRIP}, per-axis velocity box "
+          f"+-{S_MAX} (speeds to {S_MAX * 2 ** 0.5:.3f}), "
           f"horizon {HORIZON}")
-    gap, gap_at, ticks, ticks_at, bad = sweep()
-    total = 13 * 13 * 5 * 8
+    # the count comes FROM the sweep; it was hard-coded once and went
+    # stale the moment the resolution changed, reporting 6,760 starts for
+    # a 26,244-start sweep.
+    gap, gap_at, ticks, ticks_at, bad, total = sweep()
     print(f"  swept {total} recovery starts\n")
     print(f"  worst clearance        {gap:.4f}  at x={gap_at[0]:.2f} "
-          f"y={gap_at[1]:.2f} |v|={gap_at[2]:.2f} th={gap_at[3]:.2f}")
+          f"y={gap_at[1]:.2f} v=({gap_at[2]:.2f}, {gap_at[3]:.2f})")
     print(f"  longest recovery       {ticks} ticks  at x={ticks_at[0]:.2f} "
-          f"y={ticks_at[1]:.2f} |v|={ticks_at[2]:.2f}")
+          f"y={ticks_at[1]:.2f} v=({ticks_at[2]:.2f}, {ticks_at[3]:.2f})")
     print(f"  did not finish in {HORIZON}: {len(bad)} of {total}")
     print()
     if gap <= 0:

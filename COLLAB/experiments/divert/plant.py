@@ -57,11 +57,22 @@ def obstacle_distance(x, y):
 
 
 def _clip(ax, ay):
-    """Saturate the acceleration to the actuator limit, preserving direction."""
-    mag = float(np.hypot(ax, ay))
-    if mag <= A_MAX:
-        return ax, ay
-    return ax * A_MAX / mag, ay * A_MAX / mag
+    """Saturate each axis independently: the actuator set is a BOX, not a disc.
+
+    This replaced a direction-preserving disc saturation, for three reasons.
+    (1) A box input constraint is what the reachability tools this benchmark is
+    measured against actually accept - CORA, NNV and JuliaReach all take
+    interval or zonotope input sets - so the disc was a gratuitous mismatch.
+    (2) Per-axis clipping is EXACTLY representable in linear real arithmetic as
+    a nested If, whereas disc clipping is not, and the Brake step is analytic
+    and must therefore be encoded exactly rather than relaxed. Relaxing it cost
+    a real soundness-of-encoding defect: `verify.py` asserted the unsaturated
+    law a = -3v together with |a| <= A_MAX, which is jointly UNSAT whenever
+    |v| > 2/3, so every fast initial state was silently dropped from the set
+    the proof quantified over.
+    (3) The box contains the disc, so the controller is not weakened.
+    """
+    return (max(-A_MAX, min(A_MAX, ax)), max(-A_MAX, min(A_MAX, ay)))
 
 
 def avoid(x, y, vx, vy, strength):
@@ -110,7 +121,20 @@ def cruise_law(x, y, vx, vy):
 
 
 def return_law(x, y, vx, vy):
-    """Analytic stand-in for net_divert: fly home, also avoiding the obstacle."""
+    """Analytic stand-in for net_divert: fly home.
+
+    NO OBSTACLE TERM, and that is a measured decision rather than an omission.
+    Re-running the 6,760-start recovery sweep with `avoid` disabled on this law
+    alone gives an IDENTICAL worst clearance of 0.0929 and a recovery one tick
+    SHORTER (30 against 31): the worst approach happens while Brake is still
+    bleeding off speed, before Return ever takes the stick, so the term never
+    does any work here. It cost a great deal, because `side` flips sign on the
+    cross product and makes the law discontinuous - a continuous network cannot
+    clone a discontinuous function, and behavioral cloning over the arena
+    stalled at a worst error of 3.64 against an actuator limit of 2.0, which is
+    not a policy. The obstacle remains the CRUISE branch's problem, where it is
+    load-bearing.
+    """
     hx, hy = (START[0] + START[1]) / 2, (START[2] + START[3]) / 2
     dx, dy = hx - x, hy - y
     span = float(np.hypot(dx, dy))
@@ -120,8 +144,6 @@ def return_law(x, y, vx, vy):
         speed = min(V_RETURN, 1.6 * span)
         ax = 4.0 * (speed * dx / span - vx)
         ay = 4.0 * (speed * dy / span - vy)
-    dax, day = avoid(x, y, vx, vy, 8.0)
-    ax, ay = ax + dax, ay + day
     return _clip(ax, ay)
 
 
