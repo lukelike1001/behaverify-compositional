@@ -157,8 +157,17 @@ def _affine_control(z, contract):
         # slope, so saturation falls back to a tight interval. `split_to` makes
         # the pieces small enough that this costs little.
         centre = mid_a @ z.c + mid_b
-        reach = float(np.abs(mid_a @ z.G).sum()) + abs(spread)
-        if centre - reach >= -A_MAX and centre + reach <= A_MAX:
+        swing = float(np.abs(mid_a @ z.G).sum())
+        reach = swing + abs(spread)
+        # Clipping is monotone, so clip(a) stays inside [m(s) - r, m(s) + r]
+        # unless that whole interval lies outside [-A_MAX, A_MAX] - only then
+        # does the plant apply a value the contract does not contain. Testing
+        # the looser `centre +- reach within the limit` instead dropped the
+        # slope wherever the bound merely TOUCHED saturation, and the lost
+        # slope let pieces grow, which forced more splitting, which is how the
+        # live count went from a peak of 3,597 to 37,479.
+        if (centre + swing - abs(spread) <= A_MAX
+                and centre - swing + abs(spread) >= -A_MAX):
             slope[axis], offset[axis] = mid_a, mid_b
             radius[axis] = abs(spread)
         else:
